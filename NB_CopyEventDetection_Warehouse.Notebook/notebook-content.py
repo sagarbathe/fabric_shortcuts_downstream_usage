@@ -78,6 +78,14 @@ except Exception as e:
     log_error_to_lakehouse("load_config", e)
     raise
 
+# config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every
+# run while still allowing an environment (e.g. a dev workspace with no Warehouse items) to skip this
+# engine entirely without editing the orchestrating pipeline - just flip config, no redeploy needed.
+ENABLED_ENGINES = config.get("orchestration", {}).get("enabledEngines", ["warehouse", "sparkKafka"])
+if "warehouse" not in ENABLED_ENGINES:
+    print("Warehouse engine disabled via config.orchestration.enabledEngines - exiting without doing work.")
+    notebookutils.notebook.exit("skipped: warehouse engine disabled in config")
+
 TENANT_ID = config["auth"]["tenantId"]
 CLIENT_ID = config["auth"]["clientId"]
 CLIENT_SECRET = config["auth"]["clientSecret"]

@@ -1,0 +1,25 @@
+{
+  "monitoredWorkspaces": [
+    { "workspaceName": "WS_Example01", "workspaceId": "00000000-0000-0000-0000-000000000001" },
+    { "workspaceName": "WS_Example02", "workspaceId": "00000000-0000-0000-0000-000000000002" }
+  ],
+  "detection": {
+    "duplicateShortcutCheck": true,
+    "readAndSavedAsIsCheck": true,
+    "columnRetentionThresholdPercent": 80,
+    "thresholdEffectiveFrom": "2026-09-06",
+    "excludeWarehouseNamePatterns": ["StagingWarehouseForDataflows", "DataflowsStagingWarehouse"],
+    "lineageFileCleanupMode": "none",
+    "lineageFileCleanupGraceMinutes": 60
+  },
+  "orchestration": {
+    "enabledEngines": ["warehouse", "sparkKafka"],
+    "note": "Controls which NB_CopyEventDetection_* notebooks do work when invoked by the orchestrating Data Pipeline (PL_ShortcutMonitoringOrchestrator). The pipeline's own schedule trigger is the single source of truth for run cadence - this flag is purely an enable/disable switch per engine, not a cadence control."
+  },
+  "auth": {
+    "tenantId": "00000000-0000-0000-0000-000000000000",
+    "clientId": "00000000-0000-0000-0000-000000000000",
+    "clientSecret": "<enter manually in the deployed config.json - do not commit this value>",
+    "note": "clientSecret is entered manually in the live config.json at Files/config/config.json in LH_ShortcutMonitoring. Key Vault-backed secret storage was considered and deliberately deferred - see docs/Shortcut Monitoring Solution - Design Document.md."
+  }
+}

@@ -125,6 +125,14 @@ except Exception as e:
     log_error_to_lakehouse("load_config", e)
     raise
 
+# config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every
+# run while still allowing an environment (e.g. a dev workspace with no Eventstream wired up) to skip
+# this engine entirely without editing the orchestrating pipeline - just flip config, no redeploy needed.
+ENABLED_ENGINES = config.get("orchestration", {}).get("enabledEngines", ["warehouse", "sparkKafka"])
+if "sparkKafka" not in ENABLED_ENGINES:
+    print("SparkKafka engine disabled via config.orchestration.enabledEngines - exiting without doing work.")
+    notebookutils.notebook.exit("skipped: sparkKafka engine disabled in config")
+
 MONITORED_WORKSPACES = config["monitoredWorkspaces"]
 THRESHOLD_PCT = float(config["detection"]["columnRetentionThresholdPercent"])
 WORKSPACE_ID_TO_NAME = {w["workspaceId"]: w["workspaceName"] for w in MONITORED_WORKSPACES}

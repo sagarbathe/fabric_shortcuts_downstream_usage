@@ -25,17 +25,40 @@ folder is one Fabric item, named `<DisplayName>.<ItemType>`), synced from the
 | `NB_OpenLineage_Validate.Notebook` | Notebook | Validation notebook exercising a real shortcut read + save so the `ENV_OpenLineage` environment's `OpenLineageSparkListener` emits START/COMPLETE lineage events to the Kafka transport for testing. |
 | `ENV_OpenLineage.Environment` | Environment | Spark environment with the OpenLineage listener configured, attached to the OpenLineage-instrumented notebooks. |
 | `ES_OpenLineageEvents.Eventstream` | Eventstream | Ingests OpenLineage events (emitted by `ENV_OpenLineage`) for downstream copy-event correlation. |
+| `PL_ShortcutMonitoringOrchestrator.DataPipeline` | Data Pipeline | Orchestrates the solution: runs `NB_ShortcutInventory_DuplicateDetection` first, then fans out to `NB_CopyEventDetection_Warehouse` and `NB_CopyEventDetection_SparkKafka` in parallel (each only does work if enabled in config). Has a 15-minute Cron schedule, **created disabled** — enable it in the Fabric portal (Settings → Schedule) once the solution is validated. |
+
+## Configuration (`config.json`)
+
+Each notebook reads `Files/config/config.json` from its own attached `LH_ShortcutMonitoring`
+Lakehouse at runtime (resolved dynamically via `notebookutils.runtime.context`, so no workspace/
+lakehouse IDs are hardcoded in the notebooks — reattaching to a different Lakehouse/workspace is
+enough to retarget the whole solution). See [`config.example.json`](config.example.json) for the
+full schema (**not** the live file — the real `config.json` with the live secret lives only in the
+deployed Lakehouse, never in this repo). Key sections:
+
+| Section | Purpose |
+|---|---|
+| `monitoredWorkspaces` | List of `{workspaceName, workspaceId}` — the workspaces scanned for shortcuts/copy events. Edit this to add/remove workspaces from monitoring without touching any notebook code. |
+| `detection.columnRetentionThresholdPercent` | The "saved as-is" column-retention threshold used by both copy-event engines. |
+| `detection.excludeWarehouseNamePatterns` | Auto-generated Dataflow staging warehouses to ignore during Warehouse-engine detection. |
+| `orchestration.enabledEngines` | `["warehouse", "sparkKafka"]` by default — lets you disable an engine (e.g. no Eventstream wired up in a dev workspace) purely via config; the pipeline still calls both notebooks every run, and a disabled notebook exits immediately without doing work. |
+| `auth` | Service principal `tenantId`/`clientId`/`clientSecret` used for Fabric Admin REST API calls. **`clientSecret` is entered manually into the deployed `config.json` on OneLake — it is plaintext, not Key Vault-backed.** This was a deliberate, temporary simplification; revisit before wider production rollout. |
+
+Note: run **cadence** (how often the pipeline fires) is controlled solely by the Data Pipeline's own
+schedule trigger — there is no `polling.*` config section, since a config value inside a notebook
+can't retroactively change a platform-level schedule that already decided to run it.
 
 ## Prerequisites
 
 - A Microsoft Fabric workspace (capacity must be running) with a monitoring service
   principal granted read access to all monitored workspaces.
-- `config.json` populated with the monitored workspace list and detection thresholds
-  (see design doc §5).
+- `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
+  workspace list, detection thresholds, and the service principal's `clientSecret` filled in
+  manually (see `config.example.json`).
 
 ## Deployment
 
-Import/sync these items into a Fabric workspace (e.g. via workspace Git integration),
-attach the notebooks to `LH_ShortcutMonitoring`, and schedule
-`NB_ShortcutInventory_DuplicateDetection` and the engine-specific `NB_CopyEventDetection_*`
-notebooks per the cadence in the design document.
+Import/sync these items into a Fabric workspace (e.g. via workspace Git integration), attach the
+notebooks to `LH_ShortcutMonitoring`, populate `config.json`, and enable
+`PL_ShortcutMonitoringOrchestrator`'s schedule (Fabric portal → pipeline → Settings → Schedule) once
+validated.

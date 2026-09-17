@@ -1,0 +1,65 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "Run Shortcut Inventory + Duplicate Detection",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "d0e9fca6-a647-456a-a057-3351e27a0af6",
+          "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592"
+        }
+      },
+      {
+        "name": "Run Copy Event Detection - Warehouse",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run Shortcut Inventory + Duplicate Detection",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "436cf49e-3fb7-4d97-84cc-2ad71578b137",
+          "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592"
+        }
+      },
+      {
+        "name": "Run Copy Event Detection - SparkKafka",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run Shortcut Inventory + Duplicate Detection",
+            "dependencyConditions": ["Succeeded"]
+          }
+        ],
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "61617dd0-188d-417e-bb66-386463fdbd80",
+          "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592"
+        }
+      }
+    ],
+    "description": "Orchestrates the Shortcut Monitoring solution: runs shortcut inventory + duplicate detection first, then fans out to the Warehouse and SparkKafka copy-event detection engines in parallel (each engine can be individually enabled/disabled via config.orchestration.enabledEngines without editing this pipeline)."
+  }
+}
