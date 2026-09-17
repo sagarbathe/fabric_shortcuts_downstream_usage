@@ -1,0 +1,87 @@
+{
+  "sources": [
+    {
+      "id": "a1b39954-804a-41ea-bae5-83c77c28a8bf",
+      "name": "OpenLineageCustomEndpoint",
+      "type": "CustomEndpoint",
+      "properties": {}
+    }
+  ],
+  "destinations": [
+    {
+      "id": "5e04537c-4974-4056-9fb9-ebf18a96ad30",
+      "name": "LH_ShortcutMonitoring_Sink",
+      "type": "Lakehouse",
+      "properties": {
+        "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592",
+        "itemId": "c61c659f-ecba-4de8-a5b7-25885eb3021f",
+        "schema": "",
+        "deltaTable": "ol_lineage_events_v3",
+        "minimumRows": 1,
+        "maximumDurationInSeconds": 60,
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "FlattenedStream"
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "id": "91fae783-9aae-4e13-85dc-a430d06d5b3d",
+      "name": "ES_OpenLineageEvents-stream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        {
+          "name": "OpenLineageCustomEndpoint"
+        }
+      ]
+    },
+    {
+      "id": "c3d4e5f6-0002-4002-8002-bbbbbbbbbbbb",
+      "name": "FlattenedStream",
+      "type": "DerivedStream",
+      "properties": {
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "SqlFlatten"
+        }
+      ]
+    }
+  ],
+  "operators": [
+    {
+      "name": "SqlFlatten",
+      "type": "SQL",
+      "inputNodes": [
+        {
+          "name": "ES_OpenLineageEvents-stream"
+        }
+      ],
+      "properties": {
+        "query": "SELECT eventTime, producer, eventType, run, job, json_stringify(inputs) AS inputs_json, json_stringify(outputs) AS outputs_json INTO [FlattenedStream] FROM [ES_OpenLineageEvents-stream] WHERE eventType = 'COMPLETE'",
+        "advancedSettings": {
+          "eventsOutOfOrderPolicy": "Adjust",
+          "eventsOutOfOrderMaxDelayInSeconds": 5,
+          "eventsLateArrivalMaxDelayInSeconds": 300
+        }
+      }
+    }
+  ],
+  "compatibilityLevel": "1.1"
+}
