@@ -76,18 +76,47 @@ flowchart TD
     │   └── PL_ShortcutMonitoringOrchestrator.DataPipeline/
     ├── environment/
     │   └── ENV_OpenLineage.Environment/
-    └── eventstreams/
-        └── ES_OpenLineageEvents.Eventstream/
+    ├── eventstreams/
+    │   └── ES_OpenLineageEvents.Eventstream/
+    ├── semanticmodels/
+    │   └── SM_ShortcutMonitoring.SemanticModel/
+    ├── reports/
+    │   └── RPT_ShortcutMonitoring.Report/
+    └── dataagents/
+        └── DA_ShortcutMonitoring.DataAgent/
 ```
 
 > **Fabric Git sync note:** each Fabric item folder (`<DisplayName>.<ItemType>`) must still sit
 > directly inside the folder that the Fabric workspace's Git connection points at — Fabric mirrors
 > folder structure 1:1 between the repo and the workspace. This repo's items were regrouped by type
-> under `fabric/notebooks/`, `fabric/pipelines/`, `fabric/environment/`, `fabric/eventstreams/`; to
-> keep the live `Shortcut Monitoring solution` workspace in sync, create matching folders
-> (`notebooks`, `pipelines`, `environment`, `eventstreams`) inside that workspace folder, move each
-> item into its corresponding folder there, then reconnect/sync — otherwise Git sync will show these
-> items as moved/conflicting until the workspace side matches.
+> under `fabric/notebooks/`, `fabric/pipelines/`, `fabric/environment/`, `fabric/eventstreams/`,
+> `fabric/semanticmodels/`, `fabric/reports/`, `fabric/dataagents/`; to keep the live `Shortcut
+> Monitoring solution` workspace in sync, create matching folders inside that workspace folder, move
+> each item into its corresponding folder there, then reconnect/sync — otherwise Git sync will show
+> these items as moved/conflicting until the workspace side matches.
+
+## Analytics layer (semantic model, report, Data Agent)
+
+On top of the 4 tables produced by the notebooks, the repo also ships a ready-to-use analytics
+layer — see the [Data Dictionary](docs/data-model/Data%20Dictionary.md) for full table/column
+descriptions, all reused verbatim as the semantic model's own metadata:
+
+| Item | Type | Purpose |
+|---|---|---|
+| `SM_ShortcutMonitoring.SemanticModel` | Semantic Model | Import-mode model over `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`, `FactShortcutInventoryDiff` (via the Lakehouse SQL analytics endpoint). Adds a `shortcut_sk` bridge column on each Fact table (Lakehouse tables don't share a real key) and reproduces `vw_FactCopyEvent_SourceStatus`'s two enrichment columns (`Source Shortcut Exists Now`, `Source Removed At`) as calculated columns on `FactCopyEvent`, plus ~20 measures (`Flagged Copy Events`, `Flagged %`, `Duplicate Groups`, `Net Shortcut Change`, etc.). Every table/column carries the same description shown in the Data Dictionary, so Copilot/Q&A and the Data Agent can reason about them directly. |
+| `RPT_ShortcutMonitoring.Report` | Report | Sample 4-page Power BI report bound to `SM_ShortcutMonitoring`: **Executive Summary** (KPI cards + trend), **Copy Events** (engine slicer, trend chart, detail table), **Duplicate Shortcuts** (severity breakdown, detail table), **Inventory & Churn** (added/removed trend, lifecycle table). |
+| `DA_ShortcutMonitoring.DataAgent` | Data Agent | Natural-language Q&A agent bound to `SM_ShortcutMonitoring`, with `aiInstructions` covering all 3 areas (copy-event risk, duplicate-shortcut governance, inventory/churn) and 4 few-shot DAX examples. |
+
+**One-time manual step after deploying the semantic model:** Fabric REST/Git-sync deployment
+creates the SQL connection for the model's Import-mode queries without any bound credentials. Before
+the model will refresh, open **`SM_ShortcutMonitoring` → Settings → Data source credentials** in the
+Fabric portal and sign in once (organizational account is enough) to bind the SQL analytics endpoint
+connection. This is a one-time step per workspace, not required again after that.
+
+The generator scripts used to author these items (`scripts/gen_semantic_model.py`,
+`scripts/gen_report.py`, `scripts/gen_data_agent.py`) and the generic deployer
+(`scripts/deploy_item.ps1`) are kept in the repo so the analytics layer can be regenerated or
+extended without hand-editing the underlying JSON.
 
 ## Item reference
 
