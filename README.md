@@ -168,6 +168,24 @@ To rebuild it from scratch (or verify an existing one):
 > from the Details pane above (this invalidates the old key) — and if it was pushed to a remote,
 > scrub it from git history (e.g. `git filter-repo`) and force-push, in addition to rotating it.
 
+4. **Where the emitted events end up, and what permissions that needs:** every monitored notebook's
+   OpenLineage events land in ONE shared table — `ol_lineage_events_v3` in `LH_ShortcutMonitoring`,
+   inside the monitoring workspace (`WS_SagarFabric01`) — regardless of which workspace the emitting
+   notebook itself runs in. Two independent permission boundaries apply, and the common assumption
+   ("does every monitored workspace need write access to the monitoring workspace?") is **no**:
+   - **Notebook → Eventstream (producer side):** a monitored notebook only needs the Kafka SASL
+     connection string above to publish as a Kafka producer to the `OpenLineageCustomEndpoint` source.
+     This is a network/credential-based Kafka auth, unrelated to the notebook's own workspace's Fabric
+     RBAC permissions.
+   - **Eventstream → Lakehouse (destination side):** `ES_OpenLineageEvents`'s Lakehouse destination
+     (`eventstream.json`) points directly at `LH_ShortcutMonitoring` via `workspaceId`/`itemId`. That
+     write permission was granted **once**, when the destination was configured in the Fabric portal
+     (its "Get data"-style destination wizard) — it's baked into the Eventstream item itself and is
+     never re-evaluated per producing notebook/workspace.
+
+   So the only thing to distribute per monitored workspace is the Kafka secret into that workspace's
+   `ENV_OpenLineage` environment — no cross-workspace Fabric item permissions need to be granted.
+
 ## Prerequisites
 
 - A Microsoft Fabric workspace (capacity must be running) with a monitoring service
