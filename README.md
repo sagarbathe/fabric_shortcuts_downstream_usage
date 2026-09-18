@@ -40,10 +40,6 @@ for the full design (architecture, data model, thresholds, rules).
 > (`notebooks`, `pipelines`, `environment`, `eventstreams`) inside that workspace folder, move each
 > item into its corresponding folder there, then reconnect/sync — otherwise Git sync will show these
 > items as moved/conflicting until the workspace side matches.
->
-> **Not published here:** `NB_OpenLineage_SparkLineageTest.Notebook` is a read-only
-> investigation spike (see its docstring) — it stays in the Fabric workspace and in this repo's
-> local working copy (gitignored), but is intentionally excluded from the GitHub-published history.
 
 ## Item reference
 

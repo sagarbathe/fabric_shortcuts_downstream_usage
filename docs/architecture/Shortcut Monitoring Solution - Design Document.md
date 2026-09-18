@@ -651,7 +651,7 @@ design):** investigation during implementation found Workspace Monitoring's Spar
 only job-level status/duration, not the per-statement `ReadSchema`/`WriteSchema` physical-plan detail
 the original design assumed. **OpenLineage** (an open-source lineage-emission Spark listener,
 `io.openlineage.spark.agent.OpenLineageSparkListener`, bundled/available in the Fabric Spark runtime)
-was spiked instead and validated end-to-end in `NB_OpenLineage_SparkLineageTest`: enabled via a
+was spiked and validated end-to-end via a standalone investigation notebook: enabled via a
 `%%configure -f` cell (must be the interactive session's first cell/first line — the Job Scheduler API
 does not support `%%configure`; scheduled/API-triggered runs must instead pass the same Spark conf via
 the run request's `executionData.configuration.conf`), configured with the **file transport**
