@@ -1,11 +1,20 @@
 ﻿# Shortcut "Read-and-Save-As-Is" Monitoring Solution — Design Document
 
 **Status:** Living document. Sections 0–12 are the original solution design (target-state
-architecture). Section 13 records the **actual implementation** built and validated in the tenant
+architecture) — this covers **all three** originally-scoped engines (Spark, Warehouse, Dataflow
+Gen2). Section 13 records the **actual implementation** built and validated in the tenant
 (`mngenvmcap146722.onmicrosoft.com`, workspace `WS_SagarFabric01`), which deliberately diverged from
 the original Real-Time Intelligence/Eventhouse architecture in favor of a simpler, notebook-based MVP
 once implementation began — Section 13 explains why and documents the resulting data model precisely
-as built. Section 14 records an alternate approach (OneLake Diagnostics + Delta History correlation)
+as built.
+
+> **Implementation status — read this first:** only the **Spark** and **Warehouse** engines are
+> actually built (`NB_CopyEventDetection_Spark`/`NB_CopyEventDetection_SparkKafka` and
+> `NB_CopyEventDetection_Warehouse`). **Dataflow Gen2 detection is designed (§4.3) but not
+> implemented** — no notebook exists for it, and it is not part of this repo's deployable solution.
+> Treat §4.3 as forward-looking design only.
+
+Section 14 records an alternate approach (OneLake Diagnostics + Delta History correlation)
 that was researched as an alternative to OpenLineage for Spark-engine detection but was **not** the
 approach ultimately implemented (kept for reference/comparison only).
 
