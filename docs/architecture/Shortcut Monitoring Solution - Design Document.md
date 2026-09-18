@@ -243,9 +243,9 @@ any single one.
   Admin API (default every 15 min), because that API itself is not a push/event source.
 
 > **Note (see §13):** the Eventstream/Eventhouse/Data Activator backbone described above is the
-> **target-state** architecture. The implementation actually built (Phase 1 + Phase 2 MVP) uses plain
+> **target-state** architecture. The implementation actually built uses plain
 > scheduled Fabric notebooks writing directly to Delta tables instead — functionally equivalent for
-> the MVP's near-real-time-enough latency needs, at a fraction of the setup complexity, and easily
+> the near-real-time-enough latency needs, at a fraction of the setup complexity, and easily
 > upgraded to the full Eventstream backbone later without changing the underlying data model.
 
 ---
@@ -296,7 +296,7 @@ any single one.
   3. `columns_saved` is cross-checked against the actual destination object's `INFORMATION_SCHEMA`
      after the statement commits, to guard against parser edge cases (e.g., `SELECT *` on a view that
      itself already excludes columns).
-- **This is what was actually implemented** (Phase 1, §13.2/§13.3) — a regex-based (not full-grammar)
+- **This is what was actually implemented** (§13.2/§13.3) — a regex-based (not full-grammar)
   T-SQL parser proved sufficient in practice for the CTAS/INSERT-SELECT shapes actually observed.
 
 ### 4.3 Dataflow Gen2 (Power Query / M)
@@ -316,7 +316,7 @@ any single one.
      equivalent to a full unfiltered read).
   4. `columns_saved` = compare the **destination table's** actual schema after refresh (Lakehouse/
      Warehouse destination configured for the dataflow) against `columns_available`.
-- **Not yet implemented** — deferred per the rollout plan (§11); still Phase-2/3 scope.
+- **Not yet implemented** — deferred per the rollout plan (§11).
 
 ### 4.4 Common cross-check (safety net for all three engines)
 
@@ -356,7 +356,7 @@ Events land in `RawShortcutActivityEvents` (see architecture diagram, §3) and a
 
 > **Not yet implemented** — the current build's `DimShortcut` (§13.1) is populated purely from
 > point-in-time Fabric REST API snapshots (list/get shortcuts), not the Admin Activity Events feed;
-> `created_by`/`created_at` attribution and the independent fast-path CreateShortcut alert are Phase-2/3
+> `created_by`/`created_at` attribution and the independent fast-path CreateShortcut alert are
 > follow-ups.
 
 ---
@@ -447,7 +447,7 @@ materialized view feeding it) for:
 - `severity = Medium` → optional daily digest instead of immediate ping, to avoid alert fatigue for
   same-workspace copies.
 
-> **Not yet implemented** — no Data Activator rule exists yet; alerting is Phase-2/3 scope per the
+> **Not yet implemented** — no Data Activator rule exists yet; alerting is future scope per the
 > rollout plan (§11). Currently, results are visible only by querying `FactCopyEvent` directly or via
 > the JSON run-summary artifacts each detection notebook writes to `Files/reports/`.
 
@@ -534,20 +534,20 @@ this solution — they are dependencies on the tenant/platform.
 
 ## 11. Rollout Plan
 
-1. **MVP (Phase 1):** Spark + Warehouse engines only, single-hop, same-tenant shortcuts, Power BI
-   report, config threshold table, batch detection notebook on a 5-minute schedule (defer full
-   Eventstream/Activator real-time wiring).
-2. **Phase 2:** Add Dataflow Gen2 detection; wire Eventstream + Data Activator for true near-real-time
-   Spark/Warehouse detection; add high-severity alerting.
-3. **Phase 3:** Add Fabric Data Agent; add cross-tenant/external shortcut coverage; add anomaly
-   detection on `FactShortcutReadEvent` (read spikes / first-time access).
+**Built:** Spark + Warehouse engines, single-hop, same-tenant shortcuts, config threshold table, batch
+detection notebooks on a schedule (deferring full Eventstream/Activator real-time wiring).
+
+**Not yet built (future scope):** Dataflow Gen2 detection; Eventstream + Data Activator wiring for
+true near-real-time Spark/Warehouse detection; high-severity alerting; Power BI report; Fabric Data
+Agent; cross-tenant/external shortcut coverage; anomaly detection on `FactShortcutReadEvent` (read
+spikes / first-time access).
 
 > **Actual progress vs. this plan, as of this document's last update:** Warehouse-engine detection
-> (Phase 1, first half) is fully built and validated. Spark-engine detection (also nominally Phase 1)
-> was delayed pending a viable column-lineage source, then completed using OpenLineage instead of the
-> originally-envisioned Workspace Monitoring Spark-plan parsing (§4.1 note, §13.4). Power BI report,
-> Fabric Data Agent, Dataflow Gen2, Eventstream/Data Activator real-time wiring, and alerting are all
-> still open (Phase 2/3, not started). See §13.7 for the precise open item list.
+> is fully built and validated. Spark-engine detection was delayed pending a viable column-lineage
+> source, then completed using OpenLineage instead of the originally-envisioned Workspace Monitoring
+> Spark-plan parsing (§4.1 note, §13.4). Power BI report, Fabric Data Agent, Dataflow Gen2,
+> Eventstream/Data Activator real-time wiring, and alerting are all still open (not started). See
+> §13.7 for the precise open item list.
 
 ---
 
@@ -561,8 +561,8 @@ this solution — they are dependencies on the tenant/platform.
 - OneLake diagnostics and Admin Activity Events APIs are subject to Fabric-side ingestion delay/
   throttling; polling intervals should be tuned to tenant size and API quota.
 - External/cross-tenant shortcuts (ADLS/S3/GCS, cross-tenant sharing) are read-tracked differently
-  (no OneLake diagnostics equivalent in all cases) — flagged as a Phase 3 investigation item, not
-  solved by this MVP.
+  (no OneLake diagnostics equivalent in all cases) — flagged as a future investigation item, not
+  solved yet.
 - Column name-based matching (rather than true lineage IDs) can mis-attribute if the destination
   table happens to have same-named-but-different-meaning columns; acceptable false-positive risk for
   a monitoring/detective control, but should be documented for stakeholders.
@@ -615,7 +615,7 @@ diffs against the prior snapshot into `FactShortcutInventoryDiff` (append, new/r
 only), and computes the two-pass duplicate-group detection into `FactDuplicateShortcutGroup`. Scheduled
 every 15 minutes.
 
-### 13.3 `NB_CopyEventDetection_Warehouse` (Warehouse engine, Phase 1)
+### 13.3 `NB_CopyEventDetection_Warehouse` (Warehouse engine)
 
 Discovers every Warehouse item in the monitored workspaces (excluding Fabric's own auto-generated
 Dataflow-staging warehouses), and for each one:
@@ -644,7 +644,7 @@ Dataflow-staging warehouses), and for each one:
 cross-item case (shortcut hosted in `lakehouse03`, copied via CTAS run from `warehouse03`), both with
 100% retention and correctly flagged.
 
-### 13.4 `NB_CopyEventDetection_Spark` (Spark engine, Phase 1/2 boundary)
+### 13.4 `NB_CopyEventDetection_Spark` (Spark engine)
 
 **Why OpenLineage, and not Workspace Monitoring's Spark execution-plan parsing (§4.1's original
 design):** investigation during implementation found Workspace Monitoring's Spark telemetry exposes
@@ -1099,11 +1099,11 @@ other security signals).
 
 ### 14.12 Rollout Plan (as originally proposed for this alternate approach)
 
-| Phase | Scope | Goal |
+| Stage | Scope | Goal |
 |---|---|---|
-| 1 — Pilot | One or two workspaces with known sensitive shortcuts | Validate schema field names, `correlationId` behavior, time-window tuning |
-| 2 — Expand | All workspaces holding sensitive data | Full Bronze→Gold pipeline running daily, dashboard live |
-| 3 — Harden | Tenant-wide | Automate diagnostics enablement via REST API, add alerting, integrate with SIEM, add Warehouse/KQL parallel pipelines |
+| Pilot | One or two workspaces with known sensitive shortcuts | Validate schema field names, `correlationId` behavior, time-window tuning |
+| Expand | All workspaces holding sensitive data | Full Bronze→Gold pipeline running daily, dashboard live |
+| Harden | Tenant-wide | Automate diagnostics enablement via REST API, add alerting, integrate with SIEM, add Warehouse/KQL parallel pipelines |
 
 ### 14.13 Open Items to Validate Before Production (had this approach been chosen)
 

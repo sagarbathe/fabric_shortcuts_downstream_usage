@@ -23,7 +23,7 @@
 # MARKDOWN ********************
 
 # ## NB_CopyEventDetection_Warehouse
-# Phase-1 MVP notebook for the "shortcut read and saved as is" rule (design doc §1.1, §4.2).
+# Notebook for the "shortcut read and saved as is" rule (design doc §1.1, §4.2).
 # 
 # Scope of this notebook: **Warehouse engine only.** For each Warehouse in the monitored workspaces,
 # reads `<warehouse_name>.queryinsights.exec_requests_history` (Fabric Warehouse Query Insights) to find CREATE-TABLE-AS-SELECT

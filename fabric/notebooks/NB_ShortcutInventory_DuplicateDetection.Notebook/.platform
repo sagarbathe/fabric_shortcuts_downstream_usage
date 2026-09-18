@@ -3,7 +3,7 @@
   "metadata": {
     "type": "Notebook",
     "displayName": "NB_ShortcutInventory_DuplicateDetection",
-    "description": "Phase-1 MVP: enumerates shortcuts across monitored workspaces, computes incremental inventory diff, and flags duplicate shortcuts (High/Medium)"
+    "description": "Enumerates shortcuts across monitored workspaces, computes incremental inventory diff, and flags duplicate shortcuts (High/Medium)"
   },
   "config": {
     "version": "2.0",

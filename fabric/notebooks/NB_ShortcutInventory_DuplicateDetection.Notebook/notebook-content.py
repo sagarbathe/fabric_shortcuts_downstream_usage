@@ -23,7 +23,7 @@
 # MARKDOWN ********************
 
 # ## NB_ShortcutInventory_DuplicateDetection
-# Phase-1 MVP notebook for the Shortcut "Read-and-Saved-As-Is" Monitoring solution.
+# Notebook for the Shortcut "Read-and-Saved-As-Is" Monitoring solution.
 # 
 # Responsibilities (see design doc §5, §6, §1.1a):
 # 1. Read the solution config (monitored workspaces, thresholds) from `Files/config/config.json`.
