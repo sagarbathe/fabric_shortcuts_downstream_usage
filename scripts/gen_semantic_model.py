@@ -5,8 +5,8 @@ Not part of the deployed solution itself - a build-time authoring helper only.
 import json
 import uuid
 
-WORKSPACE_ID = "c5c50c6e-30d1-4d2e-8766-d82917e13592"
-LAKEHOUSE_ID = "c61c659f-ecba-4de8-a5b7-25885eb3021f"
+SQL_ENDPOINT = "cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com"
+LAKEHOUSE_SQL_DB = "LH_ShortcutMonitoring"
 DIRECT_LAKE_EXPRESSION_NAME = "DirectLake - LH_ShortcutMonitoring"
 
 
@@ -16,14 +16,20 @@ def tag():
 
 def direct_lake_expression():
     """Shared named expression all Direct Lake table partitions reference via expressionSource.
-    Uses AzureStorage.DataLake (not Sql.Database) per Direct Lake authoring guidance - this points
-    straight at the Lakehouse's OneLake Delta files, not the SQL analytics endpoint."""
+    Uses Sql.Database against the Lakehouse's own SQL analytics endpoint - one of the two Direct
+    Lake datasource kinds the Fabric engine recognizes (the other being a Fabric-internal OneLake
+    connection object that isn't expressible via a public M formula/model.bim - a raw
+    AzureStorage.DataLake() expression, even in the record-argument form, is rejected at import time
+    with 'Tables in Direct Lake mode must be the SQL or OneLake datasource kind'). Because this is the
+    Lakehouse's own SQL endpoint in the same workspace, Fabric resolves access via the workspace's own
+    identity/SSO automatically - no credential binding required, unlike a generic cross-workspace SQL
+    connection would need."""
     return {
         "name": DIRECT_LAKE_EXPRESSION_NAME,
         "kind": "m",
         "expression": [
             "let",
-            f"    Source = AzureStorage.DataLake(\"https://onelake.dfs.fabric.microsoft.com/{WORKSPACE_ID}/{LAKEHOUSE_ID}\", [HierarchicalNavigation=true])",
+            f"    Source = Sql.Database(\"{SQL_ENDPOINT}\", \"{LAKEHOUSE_SQL_DB}\")",
             "in",
             "    Source",
         ],
@@ -70,13 +76,16 @@ def measure(name, expression, description, formatString=None):
 
 
 def partition(table_name, schema_name="dbo"):
-    """Direct Lake partition: no M query, just an entity reference into the shared named expression."""
+    """Direct Lake partition: no M query, just an entity reference into the shared named expression.
+    entityName must be the PHYSICAL Delta table name in OneLake, which Spark/Hive metastore always
+    lowercases regardless of the case used in saveAsTable(...) - e.g. FactCopyEvent is physically
+    stored as 'factcopyevent'. The model's own table display name (table_name) stays mixed-case."""
     return {
         "name": f"{table_name}",
         "mode": "directLake",
         "source": {
             "type": "entity",
-            "entityName": table_name,
+            "entityName": table_name.lower(),
             "schemaName": schema_name,
             "expressionSource": DIRECT_LAKE_EXPRESSION_NAME,
         },
