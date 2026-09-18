@@ -653,6 +653,24 @@ Dataflow-staging warehouses), and for each one:
 cross-item case (shortcut hosted in `lakehouse03`, copied via CTAS run from `warehouse03`), both with
 100% retention and correctly flagged.
 
+**Workflow diagram:**
+
+```mermaid
+flowchart TD
+    A["User/ETL runs a CTAS or INSERT...SELECT<br/>reading from a OneLake shortcut"] --> B["Warehouse Query Insights<br/>(queryinsights.exec_requests_history)"]
+    B --> C["NB_CopyEventDetection_Warehouse<br/>(scheduled by PL_ShortcutMonitoringOrchestrator)"]
+    C --> D["Read CopyEventWatermark<br/>(last processed start_time)"]
+    D --> E["Query exec_requests_history<br/>WHERE start_time > watermark"]
+    E --> F["Regex-parse CTAS / INSERT...SELECT:<br/>destination columns + source table ref(s),<br/>3-part-qualified names handled"]
+    F --> G{"Source table matches a known<br/>shortcut in DimShortcut?"}
+    G -- no --> Z["Skip — not a shortcut copy"]
+    G -- yes --> H["3-part-qualified INFORMATION_SCHEMA.COLUMNS<br/>against the shortcut's hosting item<br/>-> true source column count"]
+    H --> I["Compute retention_pct and flag<br/>is_shortcut_read_and_saved_as_is per §1.1 rule"]
+    I --> J["Append row to FactCopyEvent<br/>(engine = 'Warehouse')"]
+    J --> K["Advance CopyEventWatermark<br/>(merged, only past successfully-processed rows)"]
+    J --> L["Write JSON run summary to<br/>Files/reports/copyevent_summary_*"]
+```
+
 ### 13.4 `NB_CopyEventDetection_Spark` (Spark engine)
 
 **Why OpenLineage, and not Workspace Monitoring's Spark execution-plan parsing (§4.1's original
@@ -702,9 +720,33 @@ two cases.
 8. Appends to the **same** `FactCopyEvent` table (`engine='Spark'`), advances
    `SparkLineageWatermark`, and writes the same JSON-summary-to-Files pattern.
 
-**Status:** notebook content built (`notebook_copyevent_spark_content.py`); not yet deployed/tested
-end-to-end in Fabric as of this document's last update (deployment + a live test run with a source
-notebook emitting to the new per-notebook lineage path are the immediate next steps).
+**Status:** the file-transport variant described above (`notebook_copyevent_spark_content.py`) was the
+original design; the notebook actually deployed and running in this repo is its Kafka/Eventstream
+sibling, `NB_CopyEventDetection_SparkKafka` — same detection logic and rule, but events arrive via the
+`ES_OpenLineageEvents` Eventstream's Lakehouse sink table (`ol_lineage_events_v3`) instead of one file
+per notebook, so ALL monitored notebooks share a single incremental watermark
+(`SparkKafkaLineageWatermark`, keyed on the Eventstream's `EventEnqueuedUtcTime`) rather than one
+watermark per lineage file. It writes to the same `FactCopyEvent` table with `engine='SparkKafka'`.
+
+**Workflow diagram (as deployed — Kafka/Eventstream variant):**
+
+```mermaid
+flowchart TD
+    A["Notebook attached to ENV_OpenLineage<br/>reads a shortcut and writes it via Spark"] --> B["OpenLineageSparkListener emits<br/>START/COMPLETE lineage events"]
+    B --> C["Kafka transport -> ES_OpenLineageEvents<br/>Eventstream Custom Endpoint source"]
+    C --> D["Eventstream SqlFlatten operator:<br/>json_stringify(inputs/outputs)<br/>(keeps sink schema stable across event shapes)"]
+    D --> E["Lakehouse destination table<br/>ol_lineage_events_v3"]
+    E --> F["NB_CopyEventDetection_SparkKafka<br/>(scheduled by PL_ShortcutMonitoringOrchestrator)"]
+    F --> G["Read SparkKafkaLineageWatermark<br/>(last EventEnqueuedUtcTime, single shared watermark)"]
+    G --> H["Read new rows from ol_lineage_events_v3"]
+    H --> I["json.loads(inputs_json/outputs_json):<br/>output schema + per-column lineage"]
+    I --> J{"Input ABFSS path matches a<br/>known shortcut in DimShortcut?"}
+    J -- no --> Z["Skip — not a shortcut copy"]
+    J -- yes --> K["Compute retained_column_count from<br/>DIRECT/IDENTITY column lineage facets"]
+    K --> L["Compute retention_pct and flag<br/>is_shortcut_read_and_saved_as_is"]
+    L --> M["Append row to FactCopyEvent<br/>(engine = 'SparkKafka', hosting_item_id populated<br/>from trident.artifact.id)"]
+    M --> N["Advance SparkKafkaLineageWatermark<br/>to max EventEnqueuedUtcTime seen this run"]
+```
 
 ### 13.5 Incremental design, as actually implemented (see also §5's note)
 
