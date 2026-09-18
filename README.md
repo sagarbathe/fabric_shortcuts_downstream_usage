@@ -103,16 +103,20 @@ descriptions, all reused verbatim as the semantic model's own metadata:
 
 | Item | Type | Purpose |
 |---|---|---|
-| `SM_ShortcutMonitoring.SemanticModel` | Semantic Model | **Direct Lake** model over `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`, `FactShortcutInventoryDiff` — reads the Delta tables straight from OneLake, no import/refresh. Each Fact table carries a real, materialized `shortcut_sk` column (written by the notebooks) so it can relate to `DimShortcut` on a real key (Direct Lake relationships can't use a calculated column as a join key). `vw_FactCopyEvent_SourceStatus`'s two enrichment values (`Source Shortcut Exists Now`, `Source Removed At`) are reproduced as measures on `FactCopyEvent` — the model uses **no calculated columns or calculated tables at all**, only sourced columns and ~25 measures (`Flagged Copy Events`, `Flagged %`, `Duplicate Groups`, `Net Shortcut Change`, `Group Member Count`, `Copy Event Detected At`, etc.). Every table/column carries the same description shown in the Data Dictionary, so Copilot/Q&A and the Data Agent can reason about them directly. |
+| `SM_ShortcutMonitoring.SemanticModel` | Semantic Model | **Direct Lake** model over `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`, `FactShortcutInventoryDiff` — reads the Delta tables straight from OneLake (via the Lakehouse's own SQL analytics endpoint, using the `Sql.Database`-with-`mode: directLake` connector — the only Direct Lake source kind the Fabric engine accepts from a hand-authored `model.bim`; a generic `AzureStorage.DataLake(...)` M expression is rejected at import time even though it looks plausible). No import/refresh in the traditional sense. Each Fact table carries a real, materialized `shortcut_sk` column (written by the notebooks) so it can relate to `DimShortcut` on a real key (Direct Lake relationships can't use a calculated column as a join key). `vw_FactCopyEvent_SourceStatus`'s two enrichment values (`Source Shortcut Exists Now`, `Source Removed At`) are reproduced as measures on `FactCopyEvent` — the model uses **no calculated columns or calculated tables at all**, only sourced columns and ~25 measures (`Flagged Copy Events`, `Flagged %`, `Duplicate Groups`, `Net Shortcut Change`, `Group Member Count`, `Copy Event Detected At`, etc.). Every table/column carries the same description shown in the Data Dictionary, so Copilot/Q&A and the Data Agent can reason about them directly. |
 | `RPT_ShortcutMonitoring.Report` | Report | Sample 4-page Power BI report bound to `SM_ShortcutMonitoring`: **Executive Summary** (KPI cards + trend), **Copy Events** (engine slicer, trend chart, detail table), **Duplicate Shortcuts** (severity breakdown, detail table), **Inventory & Churn** (added/removed trend, lifecycle table). |
 | `DA_ShortcutMonitoring.DataAgent` | Data Agent | Natural-language Q&A agent bound to `SM_ShortcutMonitoring`, with `aiInstructions` covering all 3 areas (copy-event risk, duplicate-shortcut governance, inventory/churn) and 4 few-shot DAX examples. |
 
-Direct Lake means there's **no manual credential-binding or refresh step** to perform after
-deploying the semantic model — it queries the Lakehouse's OneLake Delta files live on every report
-open. The only prerequisite is that the notebooks (which write the `shortcut_sk` column) have
-already run at least once against `LH_ShortcutMonitoring` so the Fact tables have that column
-populated; a brand-new deployment with an empty Lakehouse will simply show blank/zero results until
-the first pipeline run completes.
+Because the semantic model lives in the same workspace as the Lakehouse, Direct Lake resolves
+access via the workspace's own identity/SSO automatically — there's **no OAuth2 credential
+binding to configure** (the "Data source credentials" option in the portal is disabled for this
+kind of connection, which is expected, not an error). The only prerequisite is that the notebooks
+(which write the `shortcut_sk` column) have already run at least once against
+`LH_ShortcutMonitoring` so the Fact tables have that column populated; a brand-new deployment with
+an empty Lakehouse — or an existing Lakehouse whose tables predate the `shortcut_sk` column — will
+fail to refresh/frame until the next notebook run backfills it (each notebook run includes an
+idempotent one-time migration guard that adds the column if it's missing and back-fills historical
+rows from `DimShortcut`).
 
 The generator scripts used to author these items (`scripts/gen_semantic_model.py`,
 `scripts/gen_report.py`, `scripts/gen_data_agent.py`) and the generic deployer
