@@ -86,6 +86,35 @@ can't retroactively change a platform-level schedule that already decided to run
 - `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
+- At least one existing OneLake **shortcut** in a monitored workspace that has already been read and
+  saved as-is (via Spark or Warehouse) — this is what the copy-event engines actually detect. If you
+  don't already have such a scenario to test against, see **Optional: simulate a test scenario** below.
+
+### Optional: simulate a test scenario
+
+If no shortcut read + save-as-is has happened yet in a monitored workspace, you can manufacture one
+per engine so you have something for the detection notebooks to find:
+
+- **Spark engine:** run `fabric/notebooks/NB_OpenLineage_Validate.Notebook`. It reads an existing
+  OneLake shortcut and writes it out unmodified via Spark, which is exactly the "read and saved as-is"
+  pattern the Spark/OpenLineage-based engine (`NB_CopyEventDetection_SparkKafka`) looks for. Update the
+  hardcoded source shortcut path in its first cell to point at a real shortcut in your tenant before
+  running.
+- **Warehouse engine:** open the SQL query editor against a monitored Warehouse (that hosts, or has a
+  shortcut to, a source table) and run a CTAS statement reading straight from the shortcut with no
+  column reduction, e.g.:
+
+  ```sql
+  CREATE TABLE dbo.wh_validate_shortcut_copy
+  AS
+  SELECT * FROM dbo.<your_shortcut_table_name>;
+  ```
+
+  This is a genuine "read and saved as-is" copy — it will show up in that Warehouse's Query Insights
+  (`queryinsights.exec_requests_history`) as a `CREATE TABLE AS SELECT`, which `NB_CopyEventDetection_Warehouse`
+  picks up on its next run. Replace `dbo.<your_shortcut_table_name>` with the actual schema/name of the
+  shortcut table, and drop `dbo.wh_validate_shortcut_copy` afterward if you don't want to keep the test
+  artifact around.
 
 ## Deployment
 
