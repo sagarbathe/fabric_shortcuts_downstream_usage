@@ -1,0 +1,78 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "0f976ac3cd6db8556766",
+  "position": {
+    "x": 590,
+    "y": 240,
+    "z": 1000,
+    "height": 320,
+    "width": 340,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "pieChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "severity"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.severity",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "Duplicate Groups"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.Duplicate Groups",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Duplicate Groups by Severity'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

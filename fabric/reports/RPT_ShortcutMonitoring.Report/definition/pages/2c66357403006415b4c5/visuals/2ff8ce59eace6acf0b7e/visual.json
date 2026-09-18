@@ -1,0 +1,60 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "2ff8ce59eace6acf0b7e",
+  "position": {
+    "x": 240,
+    "y": 90,
+    "z": 1000,
+    "height": 110,
+    "width": 200,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "DimShortcut"
+                    }
+                  },
+                  "Property": "Internal OneLake Shortcuts"
+                }
+              },
+              "queryRef": "DimShortcut.Internal OneLake Shortcuts",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Internal OneLake Shortcuts'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "d5b8d6f0b294f975bc60",
+  "position": {
+    "x": 260,
+    "y": 350,
+    "z": 1000,
+    "height": 320,
+    "width": 990,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Detected At"
+                }
+              },
+              "queryRef": "FactCopyEvent.Detected At",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "engine"
+                }
+              },
+              "queryRef": "FactCopyEvent.engine",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "hosting_workspace_name"
+                }
+              },
+              "queryRef": "FactCopyEvent.hosting_workspace_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "matched_shortcut_database"
+                }
+              },
+              "queryRef": "FactCopyEvent.matched_shortcut_database",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "matched_shortcut_name"
+                }
+              },
+              "queryRef": "FactCopyEvent.matched_shortcut_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "dest_table"
+                }
+              },
+              "queryRef": "FactCopyEvent.dest_table",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "retention_pct"
+                }
+              },
+              "queryRef": "FactCopyEvent.retention_pct",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "is_shortcut_read_and_saved_as_is"
+                }
+              },
+              "queryRef": "FactCopyEvent.is_shortcut_read_and_saved_as_is",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Source Shortcut Exists Now"
+                }
+              },
+              "queryRef": "FactCopyEvent.Source Shortcut Exists Now",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Copy Event Detail'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "823c3135066c0d341444",
+  "position": {
+    "x": 20,
+    "y": 220,
+    "z": 1000,
+    "height": 450,
+    "width": 1230,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "duplicate_group_id"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.duplicate_group_id",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "severity"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.severity",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "hosting_workspace_name"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.hosting_workspace_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "hosting_item_name"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.hosting_item_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "shortcut_name"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.shortcut_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "source_item_name"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.source_item_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "source_path"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.source_path",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "Group Member Count"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.Group Member Count",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "explanation"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.explanation",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Duplicate Shortcut Groups Detail'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
