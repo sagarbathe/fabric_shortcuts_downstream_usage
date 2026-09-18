@@ -1,0 +1,92 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "5b37509e4d6252dda1db",
+  "position": {
+    "x": 950,
+    "y": 240,
+    "z": 1000,
+    "height": 320,
+    "width": 300,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "clusteredColumnChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "change_type"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.change_type",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "Shortcuts Added"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.Shortcuts Added",
+              "active": true
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "Shortcuts Removed"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.Shortcuts Removed",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Shortcut Inventory Changes'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

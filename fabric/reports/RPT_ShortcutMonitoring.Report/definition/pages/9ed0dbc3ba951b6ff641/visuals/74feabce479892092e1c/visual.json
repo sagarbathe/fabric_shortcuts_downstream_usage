@@ -1,0 +1,92 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "74feabce479892092e1c",
+  "position": {
+    "x": 20,
+    "y": 240,
+    "z": 1000,
+    "height": 320,
+    "width": 550,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "clusteredColumnChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "engine"
+                }
+              },
+              "queryRef": "FactCopyEvent.engine",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Total Copy Events"
+                }
+              },
+              "queryRef": "FactCopyEvent.Total Copy Events",
+              "active": true
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Flagged Copy Events"
+                }
+              },
+              "queryRef": "FactCopyEvent.Flagged Copy Events",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Copy Events by Engine'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

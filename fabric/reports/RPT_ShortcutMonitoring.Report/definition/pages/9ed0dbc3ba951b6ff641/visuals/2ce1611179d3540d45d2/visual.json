@@ -1,0 +1,60 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "2ce1611179d3540d45d2",
+  "position": {
+    "x": 20,
+    "y": 100,
+    "z": 1000,
+    "height": 110,
+    "width": 200,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Total Copy Events"
+                }
+              },
+              "queryRef": "FactCopyEvent.Total Copy Events",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Total Copy Events'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

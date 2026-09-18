@@ -1,0 +1,96 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "b8b31a25c0f855a3ac09",
+  "position": {
+    "x": 700,
+    "y": 90,
+    "z": 1000,
+    "height": 320,
+    "width": 550,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "lineClusteredColumnComboChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "snapshot_ts"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.snapshot_ts",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "Shortcuts Added"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.Shortcuts Added",
+              "active": true
+            }
+          ]
+        },
+        "Y2": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactShortcutInventoryDiff"
+                    }
+                  },
+                  "Property": "Shortcuts Removed"
+                }
+              },
+              "queryRef": "FactShortcutInventoryDiff.Shortcuts Removed",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Shortcut Churn Over Time'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

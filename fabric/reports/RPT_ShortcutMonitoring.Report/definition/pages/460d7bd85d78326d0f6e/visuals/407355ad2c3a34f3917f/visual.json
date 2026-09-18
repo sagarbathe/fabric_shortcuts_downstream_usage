@@ -1,0 +1,60 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "407355ad2c3a34f3917f",
+  "position": {
+    "x": 240,
+    "y": 90,
+    "z": 1000,
+    "height": 110,
+    "width": 200,
+    "tabOrder": 1000
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactDuplicateShortcutGroup"
+                    }
+                  },
+                  "Property": "High Severity Groups"
+                }
+              },
+              "queryRef": "FactDuplicateShortcutGroup.High Severity Groups",
+              "active": true
+            }
+          ]
+        }
+      }
+    },
+    "objects": {},
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'High Severity Groups'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
