@@ -1,0 +1,35 @@
+{
+  "$schema": "1.0.0",
+  "artifactId": "77bd6b7a-bfde-49cb-85dd-7d9357db30fd",
+  "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592",
+  "displayName": "SM_ShortcutMonitoring",
+  "type": "semantic_model",
+  "userDescription": "Semantic model for the Fabric Shortcuts Downstream Usage Monitoring solution: OneLake shortcut inventory, duplicate-shortcut governance, and copy-event (shortcut read-and-saved-as-is) risk detection.",
+  "dataSourceInstructions": "Use FactCopyEvent for questions about copy events / data being read from a shortcut and saved as a new table (retention_pct, is_shortcut_read_and_saved_as_is, engine=Warehouse|SparkKafka). Use FactDuplicateShortcutGroup for duplicate-shortcut governance questions (severity, duplicate_group_id). Use DimShortcut for 'what shortcuts exist right now' questions, and FactShortcutInventoryDiff for 'what changed / was created or removed' history questions. Join all Fact tables to DimShortcut via shortcut_sk.",
+  "elements": [
+    {
+      "display_name": "DimShortcut",
+      "type": "semantic_model.table",
+      "is_selected": true,
+      "description": "Current-state snapshot of every OneLake shortcut across monitored workspaces (one row per shortcut that exists right now)."
+    },
+    {
+      "display_name": "FactCopyEvent",
+      "type": "semantic_model.table",
+      "is_selected": true,
+      "description": "One row per detected read-from-shortcut copy event (Warehouse CTAS/INSERT-SELECT or Spark/OpenLineage). is_shortcut_read_and_saved_as_is=TRUE / 'Flagged Copy Events' measure is the core risk signal - a copy that retained all (or nearly all) source columns as-is."
+    },
+    {
+      "display_name": "FactDuplicateShortcutGroup",
+      "type": "semantic_model.table",
+      "is_selected": true,
+      "description": "One row per shortcut that is part of a duplicate-shortcut group (two+ shortcuts pointing at the same source item/path). High severity = duplicates in the same hosting item; Medium = same workspace, different hosting item."
+    },
+    {
+      "display_name": "FactShortcutInventoryDiff",
+      "type": "semantic_model.table",
+      "is_selected": true,
+      "description": "Append-only log of shortcut creation ('new') and deletion ('removed') events between consecutive 15-minute scans - the history/churn behind DimShortcut's current-state snapshot."
+    }
+  ]
+}
