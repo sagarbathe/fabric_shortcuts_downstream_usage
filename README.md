@@ -12,6 +12,49 @@ for the full design (architecture, data model, thresholds, rules).
 **Scope:** only the **Spark** and **Warehouse** copy-event engines are implemented. **Dataflow Gen2
 detection is designed in the doc (§4.3) but not built** — planned for next version.
 
+## How detection works
+
+Two independent engines feed the same `FactCopyEvent` table, distinguished by `engine = 'Warehouse'`
+vs. `engine = 'SparkKafka'`. See design doc §13.3/§13.4 for the full narrative behind each.
+
+### Warehouse engine (`NB_CopyEventDetection_Warehouse`)
+
+```mermaid
+flowchart TD
+    A["User/ETL runs a CTAS or INSERT...SELECT<br/>reading from a OneLake shortcut"] --> B["Warehouse Query Insights<br/>(queryinsights.exec_requests_history)"]
+    B --> C["NB_CopyEventDetection_Warehouse<br/>(scheduled by PL_ShortcutMonitoringOrchestrator)"]
+    C --> D["Read CopyEventWatermark<br/>(last processed start_time)"]
+    D --> E["Query exec_requests_history<br/>WHERE start_time > watermark"]
+    E --> F["Regex-parse CTAS / INSERT...SELECT:<br/>destination columns + source table ref"]
+    F --> G{"Source table matches<br/>a known shortcut in DimShortcut?"}
+    G -- no --> Z["Skip — not a shortcut copy"]
+    G -- yes --> H["INFORMATION_SCHEMA.COLUMNS on the<br/>shortcut's hosting item -> true source column count"]
+    H --> I["Compute retention % and flag<br/>is_shortcut_read_and_saved_as_is"]
+    I --> J["Append row to FactCopyEvent<br/>(engine = 'Warehouse')"]
+    J --> K["Advance CopyEventWatermark"]
+    J --> L["Write JSON run summary to<br/>Files/reports/copyevent_summary_*"]
+```
+
+### Spark engine (`NB_CopyEventDetection_SparkKafka`)
+
+```mermaid
+flowchart TD
+    A["Notebook attached to ENV_OpenLineage<br/>reads a shortcut and writes it via Spark"] --> B["OpenLineageSparkListener emits<br/>START/COMPLETE lineage events"]
+    B --> C["Kafka transport -> ES_OpenLineageEvents<br/>Eventstream Custom Endpoint source"]
+    C --> D["Eventstream SqlFlatten operator:<br/>json_stringify(inputs/outputs)"]
+    D --> E["Lakehouse destination table<br/>ol_lineage_events_v3"]
+    E --> F["NB_CopyEventDetection_SparkKafka<br/>(scheduled by PL_ShortcutMonitoringOrchestrator)"]
+    F --> G["Read SparkKafkaLineageWatermark<br/>(last EventEnqueuedUtcTime)"]
+    G --> H["Read new rows from ol_lineage_events_v3"]
+    H --> I["Parse inputs_json/outputs_json:<br/>output schema + per-column lineage"]
+    I --> J{"Input ABFSS path matches<br/>a known shortcut in DimShortcut?"}
+    J -- no --> Z["Skip — not a shortcut copy"]
+    J -- yes --> K["Compute retention % from<br/>DIRECT/IDENTITY column lineage"]
+    K --> L["Flag is_shortcut_read_and_saved_as_is"]
+    L --> M["Append row to FactCopyEvent<br/>(engine = 'SparkKafka')"]
+    M --> N["Advance SparkKafkaLineageWatermark"]
+```
+
 ## Repo layout
 
 ```
