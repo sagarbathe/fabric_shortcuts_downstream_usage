@@ -23,7 +23,6 @@ for the full design (architecture, data model, thresholds, rules).
     │   ├── NB_ShortcutInventory_DuplicateDetection.Notebook/
     │   ├── NB_CopyEventDetection_Warehouse.Notebook/
     │   ├── NB_CopyEventDetection_SparkKafka.Notebook/
-    │   ├── NB_OpenLineage_SparkLineageTest.Notebook/
     │   └── NB_OpenLineage_Validate.Notebook/
     ├── pipelines/
     │   └── PL_ShortcutMonitoringOrchestrator.DataPipeline/
@@ -41,6 +40,10 @@ for the full design (architecture, data model, thresholds, rules).
 > (`notebooks`, `pipelines`, `environment`, `eventstreams`) inside that workspace folder, move each
 > item into its corresponding folder there, then reconnect/sync — otherwise Git sync will show these
 > items as moved/conflicting until the workspace side matches.
+>
+> **Not published here:** `NB_OpenLineage_SparkLineageTest.Notebook` is a Phase-2 read-only
+> investigation spike (see its docstring) — it stays in the Fabric workspace and in this repo's
+> local working copy (gitignored), but is intentionally excluded from the GitHub-published history.
 
 ## Item reference
 
@@ -50,7 +53,6 @@ for the full design (architecture, data model, thresholds, rules).
 | `NB_ShortcutInventory_DuplicateDetection.Notebook` | Notebook | Phase-1 MVP. Enumerates Lakehouse/Warehouse shortcuts across monitored workspaces via the monitoring service principal, upserts `DimShortcut`, computes shortcut add/remove lifecycle events, and flags duplicate shortcuts (same hosting item = High severity; same hosting workspace/different item = Medium; cross-workspace same-source is not flagged). |
 | `NB_CopyEventDetection_Warehouse.Notebook` | Notebook | Phase-1 MVP, **Warehouse engine**. Mines Fabric Warehouse Query Insights (`exec_requests_history`) for CTAS/INSERT-SELECT statements sourced from a known shortcut and records them to `FactCopyEvent` (`engine = 'Warehouse'`). |
 | `NB_CopyEventDetection_SparkKafka.Notebook` | Notebook | Kafka/Eventstream-based variant of the Spark copy-event rule; writes to `FactCopyEvent` with `engine = 'SparkKafka'`, fed by the `ES_OpenLineageEvents` Eventstream. |
-| `NB_OpenLineage_SparkLineageTest.Notebook` | Notebook | Phase-2 spike/prototype — read-only investigation of Spark/OpenLineage event capture; does not touch production tables/config. |
 | `NB_OpenLineage_Validate.Notebook` | Notebook | Validation notebook exercising a real shortcut read + save so the `ENV_OpenLineage` environment's `OpenLineageSparkListener` emits START/COMPLETE lineage events to the Kafka transport for testing. |
 | `ENV_OpenLineage.Environment` | Environment | Spark environment with the OpenLineage listener configured, attached to the OpenLineage-instrumented notebooks. |
 | `ES_OpenLineageEvents.Eventstream` | Eventstream | Ingests OpenLineage events (emitted by `ENV_OpenLineage`) for downstream copy-event correlation. |
