@@ -7,7 +7,9 @@ events. It flags duplicate shortcuts pointing at the
 same source across the tenant.
 
 See [`docs/architecture/Shortcut Monitoring Solution - Design Document.md`](docs/architecture/Shortcut%20Monitoring%20Solution%20-%20Design%20Document.md)
-for the full design (architecture, data model, thresholds, rules).
+for the full design (architecture, data model, thresholds, rules), and
+[`docs/data-model/Data Dictionary.md`](docs/data-model/Data%20Dictionary.md) for a full table-by-table,
+column-by-column reference of every table/view in the solution's Lakehouse.
 
 **Scope:** only the **Spark** and **Warehouse** copy-event engines are implemented. **Dataflow Gen2
 detection is designed in the doc (§4.3) but not built** — planned for next version.
