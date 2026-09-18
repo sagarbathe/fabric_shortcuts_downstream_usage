@@ -1,0 +1,963 @@
+{
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "en-US",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "sourceQueryCulture": "en-US",
+    "dataAccessOptions": {
+      "legacyRedirects": true,
+      "returnErrorValuesAsNull": true
+    },
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"DimShortcut\", \"FactShortcutInventoryDiff\", \"FactDuplicateShortcutGroup\", \"FactCopyEvent\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "0"
+      }
+    ],
+    "tables": [
+      {
+        "name": "DimShortcut",
+        "description": "Current-state snapshot of every OneLake shortcut discovered across the monitored workspaces. Fully replaced on every scheduled run (every 15 minutes) - a dimension of shortcuts that exist right now, not a history (see FactShortcutInventoryDiff for history). Row grain: one row per shortcut.",
+        "lineageTag": "6d708378-b7bf-46d7-a9fc-b9af4ae99442",
+        "columns": [
+          {
+            "name": "shortcut_sk",
+            "dataType": "int64",
+            "sourceColumn": "shortcut_sk",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "0a71f2b4-0e99-4601-80ed-5a11126fa45c",
+            "description": "Deterministic surrogate key (xxhash64 of shortcut_key). The preferred join key to every Fact table in this model.",
+            "isKey": true
+          },
+          {
+            "name": "shortcut_key",
+            "dataType": "string",
+            "sourceColumn": "shortcut_key",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "81e8ad70-02d7-4492-9f0e-dd22c480058e",
+            "description": "Natural key: hosting_workspace_id|hosting_item_id|shortcut_path|shortcut_name. Kept for debugging only - use shortcut_sk for joins."
+          },
+          {
+            "name": "shortcut_name",
+            "dataType": "string",
+            "sourceColumn": "shortcut_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b00c5741-5e37-496b-8276-b68070c7b7dc",
+            "description": "The shortcut display name as it appears in the hosting Lakehouse/Warehouse."
+          },
+          {
+            "name": "hosting_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "b975824d-59de-4c25-9d3d-46520308baea",
+            "description": "Workspace GUID where this shortcut physically lives."
+          },
+          {
+            "name": "hosting_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "7b3f4743-2718-4a5d-aea9-d41ee49d153f",
+            "description": "Display name of the workspace hosting this shortcut."
+          },
+          {
+            "name": "hosting_item_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "16cb2e69-ae44-49ed-9710-c1cc55ea1af7",
+            "description": "Lakehouse/Warehouse item GUID that hosts (contains) this shortcut."
+          },
+          {
+            "name": "hosting_item_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "a31f0fc1-e437-4c69-86ec-310e51b0a44a",
+            "description": "Display name of the Lakehouse/Warehouse item hosting this shortcut."
+          },
+          {
+            "name": "hosting_item_type",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_type",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "797fbed1-2efc-4235-9121-5a7d3e82a3c4",
+            "description": "Fabric item type of the hosting item, e.g. Lakehouse or Warehouse."
+          },
+          {
+            "name": "shortcut_path",
+            "dataType": "string",
+            "sourceColumn": "shortcut_path",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "adf9ce4b-eb02-44bc-aca1-62cb41e21e98",
+            "description": "Path within the hosting item where the shortcut is placed, e.g. /Tables or /Files."
+          },
+          {
+            "name": "target_type",
+            "dataType": "string",
+            "sourceColumn": "target_type",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "06e50c0f-fe93-4dc0-9e2a-37fa327dc66e",
+            "description": "Type of the shortcut target: OneLake (internal, tracked for duplicates), AmazonS3, ADLS, GCS, Dataverse (external)."
+          },
+          {
+            "name": "source_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "5232df85-341a-4c28-9793-3fb3dd8bac33",
+            "description": "For OneLake targets: workspace GUID of the shortcut source item. Blank for external targets."
+          },
+          {
+            "name": "source_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b0391b5d-8df4-4011-ae86-a23749ab78d2",
+            "description": "Display name of the source workspace (OneLake targets only)."
+          },
+          {
+            "name": "source_item_id",
+            "dataType": "string",
+            "sourceColumn": "source_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "8905dc16-567f-4f75-b1b4-2c6e1b647671",
+            "description": "For OneLake targets: item GUID the shortcut points to."
+          },
+          {
+            "name": "source_item_name",
+            "dataType": "string",
+            "sourceColumn": "source_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b618f1fd-78a2-4dc2-9fe1-7a84abdf9dd1",
+            "description": "Display name of the source item the shortcut points to (OneLake targets only)."
+          },
+          {
+            "name": "source_path",
+            "dataType": "string",
+            "sourceColumn": "source_path",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "c167ea9b-a8ca-4da5-b965-468327d19572",
+            "description": "Path within the source item that the shortcut points to. Two shortcuts sharing this value (and source item) are duplicates, regardless of their own names."
+          },
+          {
+            "name": "is_internal_onelake",
+            "dataType": "boolean",
+            "sourceColumn": "is_internal_onelake",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "642d72fb-36ca-4fe2-903d-cd41cbf21fa7",
+            "description": "True if target_type = OneLake, i.e. eligible for duplicate-shortcut detection; false for external targets."
+          },
+          {
+            "name": "snapshot_ts",
+            "dataType": "dateTime",
+            "sourceColumn": "snapshot_ts",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "e3096240-e658-479e-9b24-5484936edcf6",
+            "description": "UTC timestamp of the scan run that produced this row.",
+            "formatString": "General Date"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Total Shortcuts",
+            "expression": "COUNTROWS(DimShortcut)",
+            "lineageTag": "6d143269-7007-4ea4-856a-54f0b92447b0",
+            "description": "Count of all currently-existing shortcuts across monitored workspaces."
+          },
+          {
+            "name": "Internal OneLake Shortcuts",
+            "expression": "CALCULATE([Total Shortcuts], DimShortcut[is_internal_onelake] = TRUE)",
+            "lineageTag": "f360af57-fe7b-471b-b96b-937c811a7ee4",
+            "description": "Count of currently-existing shortcuts pointing at another OneLake item (eligible for duplicate detection)."
+          },
+          {
+            "name": "External Shortcuts",
+            "expression": "[Total Shortcuts] - [Internal OneLake Shortcuts]",
+            "lineageTag": "bf56902b-9fb2-49dd-ab6d-2dd0628846bf",
+            "description": "Count of currently-existing shortcuts pointing outside OneLake (S3, ADLS, GCS, Dataverse, etc.)."
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DimShortcut",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com\", \"LH_ShortcutMonitoring\"),",
+                "    dbo_DimShortcut = Source{[Schema=\"dbo\",Item=\"DimShortcut\"]}[Data]",
+                "in",
+                "    dbo_DimShortcut"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "FactShortcutInventoryDiff",
+        "description": "Append-only lifecycle event log of shortcut creations and deletions detected between consecutive scheduled runs (every 15 minutes). Row grain: one row per shortcut per change event (new = created since last run, removed = no longer present since last run).",
+        "lineageTag": "8a7ceec9-4fa7-417e-8704-abf49cb3fbbc",
+        "columns": [
+          {
+            "name": "shortcut_sk",
+            "dataType": "int64",
+            "sourceColumn": "shortcut_sk",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "ce8ea702-1cc2-4a61-8fcc-969b22ade12e",
+            "description": "Deterministic surrogate key of the shortcut this event refers to - join to DimShortcut.shortcut_sk (rows for shortcuts already removed will not match any current DimShortcut row - expected)."
+          },
+          {
+            "name": "shortcut_key",
+            "dataType": "string",
+            "sourceColumn": "shortcut_key",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "cf3ccb50-b337-4572-8c79-6ef801bdef94",
+            "description": "Natural key of the shortcut this event refers to."
+          },
+          {
+            "name": "change_type",
+            "dataType": "string",
+            "sourceColumn": "change_type",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "d0884576-3872-4a19-b101-9117f0b28b60",
+            "description": "'new' = created since the prior run. 'removed' = existed at the prior run but no longer exists now."
+          },
+          {
+            "name": "shortcut_name",
+            "dataType": "string",
+            "sourceColumn": "shortcut_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "7429c8d9-8c27-4f5c-b7ac-026a0281d9f8",
+            "description": "Shortcut display name at the time of this event."
+          },
+          {
+            "name": "hosting_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "54fcff68-8292-4897-823f-0bf1806b9ab0",
+            "description": "Workspace GUID hosting the shortcut at the time of this event."
+          },
+          {
+            "name": "hosting_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "e1edad03-e33c-4561-a437-9721da276042",
+            "description": "Display name of the hosting workspace at the time of this event."
+          },
+          {
+            "name": "hosting_item_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "931365bb-9678-4a39-8cea-703d81fb0fd9",
+            "description": "Hosting Lakehouse/Warehouse item GUID at the time of this event."
+          },
+          {
+            "name": "hosting_item_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "bd0f5a82-e4dc-46a4-87c9-8e4f3a56c9e6",
+            "description": "Display name of the hosting item at the time of this event."
+          },
+          {
+            "name": "hosting_item_type",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_type",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "21f37d45-b28e-42aa-918f-fded5235810c",
+            "description": "Fabric item type of the hosting item."
+          },
+          {
+            "name": "shortcut_path",
+            "dataType": "string",
+            "sourceColumn": "shortcut_path",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "0200b435-b07a-418e-9e98-6d3ea4b01999",
+            "description": "Path within the hosting item, e.g. /Tables or /Files."
+          },
+          {
+            "name": "target_type",
+            "dataType": "string",
+            "sourceColumn": "target_type",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "d04b9272-f21a-4b58-abc1-41a22c8a999d",
+            "description": "Type of the shortcut target (OneLake, AmazonS3, ADLS, GCS, Dataverse, etc.)."
+          },
+          {
+            "name": "source_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "4549a67b-2cff-47d8-b019-d54d35f818ba",
+            "description": "For OneLake targets: source item workspace GUID."
+          },
+          {
+            "name": "source_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "eb839142-f90d-4f0b-9316-a062b628accd",
+            "description": "Display name of the source workspace (OneLake targets only)."
+          },
+          {
+            "name": "source_item_id",
+            "dataType": "string",
+            "sourceColumn": "source_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "f0a434b8-5930-47a5-863e-a41a61d4447f",
+            "description": "For OneLake targets: source item GUID."
+          },
+          {
+            "name": "source_item_name",
+            "dataType": "string",
+            "sourceColumn": "source_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "2bdadff4-505d-4946-9e97-06fc2240d53b",
+            "description": "Display name of the source item (OneLake targets only)."
+          },
+          {
+            "name": "source_path",
+            "dataType": "string",
+            "sourceColumn": "source_path",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "c5bef58a-b705-4396-9a48-f38d9f452d82",
+            "description": "Path within the source item that the shortcut points to."
+          },
+          {
+            "name": "is_internal_onelake",
+            "dataType": "boolean",
+            "sourceColumn": "is_internal_onelake",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "1146c713-6538-45b5-98f0-17928a1eabe8",
+            "description": "True if this was an internal OneLake shortcut (duplicate-detection eligible)."
+          },
+          {
+            "name": "snapshot_ts",
+            "dataType": "dateTime",
+            "sourceColumn": "snapshot_ts",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "1dbfb089-aef8-4ed9-bcf9-2375f285e9a2",
+            "description": "UTC timestamp of the scan run in which this change was detected.",
+            "formatString": "General Date"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Shortcuts Added",
+            "expression": "CALCULATE(COUNTROWS(FactShortcutInventoryDiff), FactShortcutInventoryDiff[change_type] = \"new\")",
+            "lineageTag": "9c41b88e-0108-4ad4-af49-058a902c667a",
+            "description": "Count of shortcut-creation events in the current filter context."
+          },
+          {
+            "name": "Shortcuts Removed",
+            "expression": "CALCULATE(COUNTROWS(FactShortcutInventoryDiff), FactShortcutInventoryDiff[change_type] = \"removed\")",
+            "lineageTag": "c03fc993-fa5f-4f78-bd05-490c9198f877",
+            "description": "Count of shortcut-deletion events in the current filter context."
+          },
+          {
+            "name": "Net Shortcut Change",
+            "expression": "[Shortcuts Added] - [Shortcuts Removed]",
+            "lineageTag": "16886009-6c08-4607-bc90-463b12fa29c5",
+            "description": "Net change in shortcut count in the current filter context (positive = growing, negative = shrinking)."
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FactShortcutInventoryDiff",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com\", \"LH_ShortcutMonitoring\"),",
+                "    dbo_FactShortcutInventoryDiff = Source{[Schema=\"dbo\",Item=\"FactShortcutInventoryDiff\"]}[Data]",
+                "in",
+                "    dbo_FactShortcutInventoryDiff"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "FactDuplicateShortcutGroup",
+        "description": "One row per shortcut that is a member of a duplicate-shortcut group, i.e. two or more shortcuts point at the exact same source item/path. High severity = duplicates live in the SAME hosting item (pure redundancy). Medium severity = duplicates live in the SAME hosting workspace but DIFFERENT hosting items. The same source shortcut reused in a DIFFERENT workspace is normal reuse and is never flagged here. Not consumed by either copy-event engine - a control-plane governance signal only.",
+        "lineageTag": "487a6f27-627c-4848-af22-86b40f108e82",
+        "columns": [
+          {
+            "name": "duplicate_group_id",
+            "dataType": "string",
+            "sourceColumn": "duplicate_group_id",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b19b787c-8627-419e-9639-535cfaec3419",
+            "description": "Stable hash identifying one duplicate group. Group all rows sharing this id to see the full duplicate set."
+          },
+          {
+            "name": "shortcut_sk",
+            "dataType": "int64",
+            "sourceColumn": "shortcut_sk",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "14fdd9d8-318e-4708-abb7-487e3a918b8c",
+            "description": "Deterministic surrogate key of the duplicated shortcut - join to DimShortcut.shortcut_sk."
+          },
+          {
+            "name": "shortcut_key",
+            "dataType": "string",
+            "sourceColumn": "shortcut_key",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "439874f3-a64c-4f24-b8bd-af5918109d8b",
+            "description": "Natural key of the duplicated shortcut."
+          },
+          {
+            "name": "shortcut_name",
+            "dataType": "string",
+            "sourceColumn": "shortcut_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b1c9a490-b978-4eed-a1b2-1399d5b0a112",
+            "description": "Display name of this specific duplicate shortcut."
+          },
+          {
+            "name": "hosting_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "40ceade1-e0c8-429a-b5f1-d1050eae3b50",
+            "description": "Workspace GUID hosting this specific duplicate shortcut."
+          },
+          {
+            "name": "hosting_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "2a1954a9-1176-4af2-9cba-a17247609427",
+            "description": "Display name of the workspace hosting this specific duplicate shortcut."
+          },
+          {
+            "name": "hosting_item_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "2d736873-9b05-4e3d-a52b-26a8be842f72",
+            "description": "Lakehouse/Warehouse item GUID hosting this specific duplicate shortcut."
+          },
+          {
+            "name": "hosting_item_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "9cce5d84-0898-4a1d-9025-91d817828bf1",
+            "description": "Display name of the item hosting this specific duplicate shortcut."
+          },
+          {
+            "name": "source_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "ed245d22-7468-4a4a-beaa-bd30ec00e333",
+            "description": "Workspace GUID of the common source all group members point to."
+          },
+          {
+            "name": "source_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "source_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "ebc4702a-face-4a8d-90d0-b71617765153",
+            "description": "Display name of the common source workspace."
+          },
+          {
+            "name": "source_item_id",
+            "dataType": "string",
+            "sourceColumn": "source_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "60b1801e-1066-4d6f-858e-1048e5b0e6bd",
+            "description": "Item GUID of the common source all group members point to."
+          },
+          {
+            "name": "source_item_name",
+            "dataType": "string",
+            "sourceColumn": "source_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "275891da-5c73-4083-86ef-2c16819ecf7d",
+            "description": "Display name of the common source item."
+          },
+          {
+            "name": "source_path",
+            "dataType": "string",
+            "sourceColumn": "source_path",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "0745c3b5-1cd2-4bb4-8cc3-3748f6f14720",
+            "description": "Common source path all group members point to - this is the field that makes them duplicates."
+          },
+          {
+            "name": "group_member_count",
+            "dataType": "string",
+            "sourceColumn": "group_member_count",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "5396f5c0-1c16-44d1-8bfd-0f0b6caaf7f3",
+            "description": "Total number of shortcuts in this duplicate group, as text (raw Delta type). Use the 'Group Member Count' calculated column for numeric aggregation."
+          },
+          {
+            "name": "severity",
+            "dataType": "string",
+            "sourceColumn": "severity",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "d223ac2f-bffd-4862-9f87-84812c41fd8a",
+            "description": "High = duplicates share the same hosting item. Medium = duplicates share the hosting workspace but live in different hosting items."
+          },
+          {
+            "name": "explanation",
+            "dataType": "string",
+            "sourceColumn": "explanation",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "878d8932-2f1d-4c13-b8c7-84f655e1e952",
+            "description": "Human-readable reason for the assigned severity."
+          },
+          {
+            "name": "detected_ts",
+            "dataType": "string",
+            "sourceColumn": "detected_ts",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "646eeec1-d697-4933-9b2b-99a55af991e3",
+            "description": "UTC timestamp when this duplicate group was last (re)computed, as text (raw Delta type). Use the 'Detected At' calculated column for a proper datetime."
+          },
+          {
+            "name": "Group Member Count",
+            "dataType": "int64",
+            "type": "calculated",
+            "expression": "VALUE(FactDuplicateShortcutGroup[group_member_count])",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "9a4ff28c-3b84-4d56-b528-ff99962b221b",
+            "description": "Numeric version of group_member_count, for aggregation/sorting in visuals."
+          },
+          {
+            "name": "Detected At",
+            "dataType": "dateTime",
+            "type": "calculated",
+            "expression": "DATETIMEVALUE(SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \"))",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "5d25abe7-d78e-4cbc-816c-236a474f032a",
+            "description": "detected_ts parsed into a proper datetime, for use in date slicers/axes.",
+            "formatString": "General Date"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Duplicate Groups",
+            "expression": "DISTINCTCOUNT(FactDuplicateShortcutGroup[duplicate_group_id])",
+            "lineageTag": "cd964d5d-4949-4388-9f62-de2d62cea9ec",
+            "description": "Count of distinct duplicate-shortcut groups in the current filter context."
+          },
+          {
+            "name": "High Severity Groups",
+            "expression": "CALCULATE([Duplicate Groups], FactDuplicateShortcutGroup[severity] = \"High\")",
+            "lineageTag": "97bd4a8b-b533-44cf-b955-e022f2e6a6ee",
+            "description": "Count of distinct High-severity duplicate groups (duplicates in the same hosting item)."
+          },
+          {
+            "name": "Medium Severity Groups",
+            "expression": "CALCULATE([Duplicate Groups], FactDuplicateShortcutGroup[severity] = \"Medium\")",
+            "lineageTag": "7a9d0ea3-0b48-4560-8fd3-5e383a0ec548",
+            "description": "Count of distinct Medium-severity duplicate groups (duplicates in the same workspace, different hosting items)."
+          },
+          {
+            "name": "Duplicate Shortcuts (rows)",
+            "expression": "COUNTROWS(FactDuplicateShortcutGroup)",
+            "lineageTag": "07491939-1809-4062-906d-767ff7e47180",
+            "description": "Total count of individual shortcuts that are members of any duplicate group (not deduplicated by group)."
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FactDuplicateShortcutGroup",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com\", \"LH_ShortcutMonitoring\"),",
+                "    dbo_FactDuplicateShortcutGroup = Source{[Schema=\"dbo\",Item=\"FactDuplicateShortcutGroup\"]}[Data]",
+                "in",
+                "    dbo_FactDuplicateShortcutGroup"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "FactCopyEvent",
+        "description": "One row per detected read-from-shortcut copy event, across the implemented engines: Warehouse (CTAS/INSERT-SELECT via Query Insights) and SparkKafka (OpenLineage column-lineage detection via the ES_OpenLineageEvents Eventstream), distinguished by the engine column. is_shortcut_read_and_saved_as_is = TRUE when the write retained ALL source columns (SELECT * equivalent) OR retention_pct > threshold_pct_at_detection, even if extra new columns were also added - this is the core signal the whole solution exists to raise. This table does NOT physically include vw_FactCopyEvent_SourceStatus's two enrichment columns - they are reproduced here as the 'Source Shortcut Exists Now' and 'Source Removed At' calculated columns instead, to avoid importing a second overlapping copy of this same grain.",
+        "lineageTag": "7a4dfe9d-bdc2-42e6-99d4-aa217083c4d1",
+        "columns": [
+          {
+            "name": "event_id",
+            "dataType": "string",
+            "sourceColumn": "event_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "211e6e38-1a16-463f-b08a-302e08f4301a",
+            "description": "Natural key. Warehouse: {item_id}|{distributed_statement_id}. SparkKafka: an OpenLineage-run-derived identifier. Unique per engine."
+          },
+          {
+            "name": "hosting_workspace_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "6c61c677-bd04-4c02-bd1e-8524a7bd6db5",
+            "description": "Workspace GUID where the copy statement/notebook ran."
+          },
+          {
+            "name": "hosting_workspace_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_workspace_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "e999326a-d3a3-4eab-b273-706b10d0459d",
+            "description": "Display name of the workspace where the copy ran."
+          },
+          {
+            "name": "hosting_item_id",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "056e10af-9632-4d26-8013-41bd51473070",
+            "description": "Warehouse item GUID (Warehouse engine) or notebook item GUID (SparkKafka engine) where the copy ran."
+          },
+          {
+            "name": "hosting_item_name",
+            "dataType": "string",
+            "sourceColumn": "hosting_item_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "28012c86-0e5d-4f99-bd4a-7ad394782116",
+            "description": "Warehouse: the Warehouse item name. SparkKafka: the monitored notebook's name."
+          },
+          {
+            "name": "engine",
+            "dataType": "string",
+            "sourceColumn": "engine",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "1bbc96e4-b654-4b06-9879-9cd96b77bbb8",
+            "description": "Fabric engine that executed the copy: Warehouse or SparkKafka. (Dataflow Gen2 is designed but not implemented - see design doc.)"
+          },
+          {
+            "name": "matched_shortcut_name",
+            "dataType": "string",
+            "sourceColumn": "matched_shortcut_name",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "4d0f5008-a074-4cfd-8c58-9733ff2538da",
+            "description": "Name of the OneLake shortcut the statement/notebook read from (matched against DimShortcut)."
+          },
+          {
+            "name": "matched_shortcut_database",
+            "dataType": "string",
+            "sourceColumn": "matched_shortcut_database",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "babc2d35-ed1e-4ce4-a5e7-d737de926053",
+            "description": "Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from hosting_item_name for cross-item copies)."
+          },
+          {
+            "name": "dest_table",
+            "dataType": "string",
+            "sourceColumn": "dest_table",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "5242176c-487f-4c03-8c00-a835e2cfae8e",
+            "description": "Destination table name the SELECT/write was saved into."
+          },
+          {
+            "name": "source_column_count",
+            "dataType": "int64",
+            "sourceColumn": "source_column_count",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "f097fd1a-4e09-4103-bdf7-a8c97ca0bc88",
+            "description": "Total column count of the shortcut source table."
+          },
+          {
+            "name": "dest_column_count",
+            "dataType": "int64",
+            "sourceColumn": "dest_column_count",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "f291fa53-ccc1-4b4e-bf18-d7e9c48130f1",
+            "description": "Column count actually written to the destination table."
+          },
+          {
+            "name": "retained_column_count",
+            "dataType": "int64",
+            "sourceColumn": "retained_column_count",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "a208e4ea-cd60-436d-a60a-d2998ce13612",
+            "description": "Number of destination columns considered retained from the source (capped at source_column_count)."
+          },
+          {
+            "name": "retention_pct",
+            "dataType": "double",
+            "sourceColumn": "retention_pct",
+            "summarizeBy": "average",
+            "isHidden": false,
+            "lineageTag": "67fa6095-6bfd-415e-8710-f63bc194e574",
+            "description": "retained_column_count / source_column_count * 100.",
+            "formatString": "0.0\"%\""
+          },
+          {
+            "name": "is_select_star",
+            "dataType": "boolean",
+            "sourceColumn": "is_select_star",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "bc93345a-2430-4929-85ef-3af0b8b52b53",
+            "description": "TRUE if the statement used SELECT * (Warehouse) / retained all columns (SparkKafka)."
+          },
+          {
+            "name": "is_shortcut_read_and_saved_as_is",
+            "dataType": "boolean",
+            "sourceColumn": "is_shortcut_read_and_saved_as_is",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "878c3120-be46-4005-a5ee-591a194c736f",
+            "description": "TRUE if is_select_star OR retention_pct > threshold_pct_at_detection - the flag this whole solution exists to raise."
+          },
+          {
+            "name": "threshold_pct_at_detection",
+            "dataType": "double",
+            "sourceColumn": "threshold_pct_at_detection",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "636ff113-4dce-4c0c-8f82-c13db784bb31",
+            "description": "Configurable retention threshold (config.detection.columnRetentionThresholdPercent) in effect when this row was computed.",
+            "formatString": "0.0\"%\""
+          },
+          {
+            "name": "query_start_time",
+            "dataType": "string",
+            "sourceColumn": "query_start_time",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "6d2a5f1f-62e1-45fe-a06d-5b45c565e35a",
+            "description": "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' calculated column for a proper datetime."
+          },
+          {
+            "name": "detected_ts",
+            "dataType": "string",
+            "sourceColumn": "detected_ts",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "1c2c4d34-5387-48e5-8454-7ef483157ff1",
+            "description": "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' calculated column for a proper datetime."
+          },
+          {
+            "name": "shortcut_sk",
+            "dataType": "int64",
+            "type": "calculated",
+            "expression": "LOOKUPVALUE(\n\tDimShortcut[shortcut_sk],\n\tDimShortcut[hosting_workspace_id], FactCopyEvent[hosting_workspace_id],\n\tDimShortcut[hosting_item_name], FactCopyEvent[matched_shortcut_database],\n\tDimShortcut[shortcut_name], FactCopyEvent[matched_shortcut_name]\n)",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "16ec918c-3e10-47bc-86e4-40f2fd9c95c1",
+            "description": "Bridge key added at the semantic-model layer only (FactCopyEvent has no native shortcut_sk column) - resolves the matched shortcut's surrogate key so this table can relate to DimShortcut. Blank if the matched shortcut is no longer in the current DimShortcut snapshot."
+          },
+          {
+            "name": "Source Shortcut Exists Now",
+            "dataType": "boolean",
+            "type": "calculated",
+            "expression": "NOT ISBLANK(RELATED(DimShortcut[shortcut_name]))",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "30a26269-1ec2-4cef-aec3-c648b884358b",
+            "description": "TRUE if the shortcut this copy event read from still exists in the current DimShortcut snapshot. Reproduces vw_FactCopyEvent_SourceStatus.source_shortcut_exists_now at the semantic-model layer."
+          },
+          {
+            "name": "Source Removed At",
+            "dataType": "dateTime",
+            "type": "calculated",
+            "expression": "CALCULATE(\n\tMAX(FactShortcutInventoryDiff[snapshot_ts]),\n\tFactShortcutInventoryDiff[hosting_workspace_id] = FactCopyEvent[hosting_workspace_id],\n\tFactShortcutInventoryDiff[hosting_item_name] = FactCopyEvent[matched_shortcut_database],\n\tFactShortcutInventoryDiff[shortcut_name] = FactCopyEvent[matched_shortcut_name],\n\tFactShortcutInventoryDiff[change_type] = \"removed\"\n)",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "64de7dc8-5245-4d1d-9f2f-aaf9076ea479",
+            "description": "If the source shortcut no longer exists, the most recent time its removal was detected. Reproduces vw_FactCopyEvent_SourceStatus.source_removed_ts at the semantic-model layer. Blank if the shortcut still exists or was never seen being removed.",
+            "formatString": "General Date"
+          },
+          {
+            "name": "Detected At",
+            "dataType": "dateTime",
+            "type": "calculated",
+            "expression": "DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[detected_ts], 19), \"T\", \" \"))",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "06d301dc-b6e5-47dc-aa93-85f55cc2bf38",
+            "description": "detected_ts parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "formatString": "General Date"
+          },
+          {
+            "name": "Query Start At",
+            "dataType": "dateTime",
+            "type": "calculated",
+            "expression": "DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[query_start_time], 19), \"T\", \" \"))",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "9ab06523-04d8-4f9b-8e00-08ca680b1ac3",
+            "description": "query_start_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "formatString": "General Date"
+          }
+        ],
+        "measures": [
+          {
+            "name": "Total Copy Events",
+            "expression": "COUNTROWS(FactCopyEvent)",
+            "lineageTag": "7aedadb9-54a2-47a0-b50e-3e7b456f17e2",
+            "description": "Count of all detected copy events (both engines) in the current filter context."
+          },
+          {
+            "name": "Flagged Copy Events",
+            "expression": "CALCULATE([Total Copy Events], FactCopyEvent[is_shortcut_read_and_saved_as_is] = TRUE)",
+            "lineageTag": "b1430429-04e8-4470-8a4e-ee5100f0af88",
+            "description": "Count of copy events flagged as 'shortcut read and saved as-is' - the core risk signal."
+          },
+          {
+            "name": "Flagged %",
+            "expression": "DIVIDE([Flagged Copy Events], [Total Copy Events])",
+            "lineageTag": "f4bf190d-016b-4c67-a930-98be04c6267b",
+            "description": "Share of copy events flagged as read-and-saved-as-is.",
+            "formatString": "0.0%"
+          },
+          {
+            "name": "Avg Retention %",
+            "expression": "AVERAGE(FactCopyEvent[retention_pct])",
+            "lineageTag": "ccdcdc31-244c-44fc-a7c8-f8be479cdd84",
+            "description": "Average column-retention percentage across copy events in the current filter context.",
+            "formatString": "0.0\"%\""
+          },
+          {
+            "name": "Copy Events - Warehouse",
+            "expression": "CALCULATE([Total Copy Events], FactCopyEvent[engine] = \"Warehouse\")",
+            "lineageTag": "1327a4c2-96e4-43ba-b3d1-c969f52af3cd",
+            "description": "Count of copy events detected by the Warehouse engine."
+          },
+          {
+            "name": "Copy Events - Spark",
+            "expression": "CALCULATE([Total Copy Events], FactCopyEvent[engine] = \"SparkKafka\")",
+            "lineageTag": "47e0b949-a88e-4a7f-9ebd-08a85696fe51",
+            "description": "Count of copy events detected by the Spark/OpenLineage engine."
+          },
+          {
+            "name": "Copy Events - Orphaned Source",
+            "expression": "CALCULATE([Total Copy Events], FactCopyEvent[Source Shortcut Exists Now] = FALSE)",
+            "lineageTag": "35d78734-5c4a-4b1e-92e1-be4fb8c39cb3",
+            "description": "Count of copy events whose source shortcut has since been deleted."
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FactCopyEvent",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com\", \"LH_ShortcutMonitoring\"),",
+                "    dbo_FactCopyEvent = Source{[Schema=\"dbo\",Item=\"FactCopyEvent\"]}[Data]",
+                "in",
+                "    dbo_FactCopyEvent"
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "df98f8e9-038a-4924-8c51-a75456b7994c",
+        "fromTable": "FactCopyEvent",
+        "fromColumn": "shortcut_sk",
+        "toTable": "DimShortcut",
+        "toColumn": "shortcut_sk",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "f4af0633-66b6-4974-a12c-91508f3368c7",
+        "fromTable": "FactDuplicateShortcutGroup",
+        "fromColumn": "shortcut_sk",
+        "toTable": "DimShortcut",
+        "toColumn": "shortcut_sk",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "d40e4514-64fd-40a2-a5d8-1eb902f1db0d",
+        "fromTable": "FactShortcutInventoryDiff",
+        "fromColumn": "shortcut_sk",
+        "toTable": "DimShortcut",
+        "toColumn": "shortcut_sk",
+        "crossFilteringBehavior": "oneDirection"
+      }
+    ]
+  }
+}
