@@ -6,14 +6,43 @@ downstream Lakehouse or Warehouse item — and, as a Phase-2 enhancement, correl
 with native Spark/OpenLineage lineage events. It flags duplicate shortcuts pointing at the
 same source across the tenant.
 
-See [`docs/Shortcut Monitoring Solution - Design Document.md`](docs/Shortcut%20Monitoring%20Solution%20-%20Design%20Document.md)
+See [`docs/architecture/Shortcut Monitoring Solution - Design Document.md`](docs/architecture/Shortcut%20Monitoring%20Solution%20-%20Design%20Document.md)
 for the full design (architecture, data model, thresholds, rules).
 
-## Solution layout
+## Repo layout
 
-This repo mirrors the Fabric workspace **git-connected item layout** (each top-level
-folder is one Fabric item, named `<DisplayName>.<ItemType>`), synced from the
-`Shortcut Monitoring solution` workspace folder.
+```
+├── README.md
+├── config/
+│   └── config.example.json        # config.json schema doc (no secrets)
+├── docs/
+│   └── architecture/
+│       └── Shortcut Monitoring Solution - Design Document.md
+└── fabric/                        # Fabric-native items, grouped by type
+    ├── notebooks/
+    │   ├── NB_ShortcutInventory_DuplicateDetection.Notebook/
+    │   ├── NB_CopyEventDetection_Warehouse.Notebook/
+    │   ├── NB_CopyEventDetection_SparkKafka.Notebook/
+    │   ├── NB_OpenLineage_SparkLineageTest.Notebook/
+    │   └── NB_OpenLineage_Validate.Notebook/
+    ├── pipelines/
+    │   └── PL_ShortcutMonitoringOrchestrator.DataPipeline/
+    ├── environment/
+    │   └── ENV_OpenLineage.Environment/
+    └── eventstreams/
+        └── ES_OpenLineageEvents.Eventstream/
+```
+
+> **Fabric Git sync note:** each Fabric item folder (`<DisplayName>.<ItemType>`) must still sit
+> directly inside the folder that the Fabric workspace's Git connection points at — Fabric mirrors
+> folder structure 1:1 between the repo and the workspace. This repo's items were regrouped by type
+> under `fabric/notebooks/`, `fabric/pipelines/`, `fabric/environment/`, `fabric/eventstreams/`; to
+> keep the live `Shortcut Monitoring solution` workspace in sync, create matching folders
+> (`notebooks`, `pipelines`, `environment`, `eventstreams`) inside that workspace folder, move each
+> item into its corresponding folder there, then reconnect/sync — otherwise Git sync will show these
+> items as moved/conflicting until the workspace side matches.
+
+## Item reference
 
 | Item | Type | Purpose |
 |---|---|---|
@@ -32,7 +61,7 @@ folder is one Fabric item, named `<DisplayName>.<ItemType>`), synced from the
 Each notebook reads `Files/config/config.json` from its own attached `LH_ShortcutMonitoring`
 Lakehouse at runtime (resolved dynamically via `notebookutils.runtime.context`, so no workspace/
 lakehouse IDs are hardcoded in the notebooks — reattaching to a different Lakehouse/workspace is
-enough to retarget the whole solution). See [`config.example.json`](config.example.json) for the
+enough to retarget the whole solution). See [`config/config.example.json`](config/config.example.json) for the
 full schema (**not** the live file — the real `config.json` with the live secret lives only in the
 deployed Lakehouse, never in this repo). Key sections:
 
