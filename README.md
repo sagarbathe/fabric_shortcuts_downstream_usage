@@ -78,6 +78,54 @@ Note: run **cadence** (how often the pipeline fires) is controlled solely by the
 schedule trigger — there is no `polling.*` config section, since a config value inside a notebook
 can't retroactively change a platform-level schedule that already decided to run it.
 
+## Building the `ENV_OpenLineage` environment (Spark + Kafka secret)
+
+`ENV_OpenLineage.Environment/Setting/Sparkcompute.yml` configures the Spark environment attached to
+the OpenLineage-instrumented notebooks (`NB_OpenLineage_Validate`, `NB_CopyEventDetection_SparkKafka`).
+To rebuild it from scratch (or verify an existing one):
+
+1. **Spark library:** add `io.openlineage:openlineage-spark_2.12:1.53.0` (or current version) as a
+   Maven/public library in the environment's **Libraries** tab, so `OpenLineageSparkListener` is on
+   the classpath.
+2. **Spark configuration (`spark_conf`)**, set under the environment's **Spark compute** tab:
+
+   | Key | Value | Purpose |
+   |---|---|---|
+   | `spark.extraListeners` | `io.openlineage.spark.agent.OpenLineageSparkListener` | Registers the listener that emits lineage events for every Spark read/write. |
+   | `spark.openlineage.transport.type` | `kafka` | Send events to the `ES_OpenLineageEvents` Eventstream's Kafka-compatible custom endpoint. |
+   | `spark.openlineage.transport.topicName` | the Eventstream custom endpoint's topic name | From the Eventstream's Details pane (Kafka tab). |
+   | `spark.openlineage.transport.properties.bootstrap.servers` | the Eventstream custom endpoint's bootstrap server, e.g. `<endpoint>.servicebus.windows.net:9093` | From the same Details pane. |
+   | `spark.openlineage.transport.properties.security.protocol` | `SASL_SSL` | Required by the Kafka-compatible endpoint. |
+   | `spark.openlineage.transport.properties.sasl.mechanism` | `PLAIN` | SAS-key auth (see the security note below for an Entra ID alternative). |
+   | `spark.openlineage.transport.properties.key.serializer` / `.value.serializer` | `org.apache.kafka.common.serialization.StringSerializer` | Standard Kafka string serializers. |
+   | `spark.openlineage.namespace` | any short identifier, e.g. `shortcut_monitoring` | Tags emitted events for this solution. |
+   | `spark.jars.packages` | `io.openlineage:openlineage-spark_2.12:1.53.0` | Belt-and-suspenders alongside the Libraries tab. |
+   | `spark.openlineage.transport.properties.sasl.jaas.config` | **secret — see below** | Kafka SASL PLAIN credential. |
+
+3. **Getting/rotating the Kafka secret:** the Custom Endpoint source on `ES_OpenLineageEvents`
+   (`OpenLineageCustomEndpoint`) is a Fabric-managed, Kafka-compatible ingestion endpoint — it is
+   **not** a separate Azure resource in your subscription; it only exists inside this Eventstream
+   item. Get (or regenerate) its connection string from the Fabric portal: open `ES_OpenLineageEvents`
+   → select the `OpenLineageCustomEndpoint` source node → **Details** pane → **Kafka** tab → copy the
+   connection string (or click regenerate for a new key). Build the JAAS config string as:
+
+   ```
+   org.apache.kafka.common.security.plain.PlainLoginModule required username="$ConnectionString" password="<paste the Kafka connection string here>";
+   ```
+
+   **Never commit the real value.** `Sparkcompute.yml` in this repo only ever contains the placeholder
+   `password="<FILL-IN-MANUALLY-DO-NOT-COMMIT>"` — paste the real value directly into the environment's
+   Spark compute settings in the Fabric portal after deployment, exactly like `config.json`'s
+   `clientSecret` (see Configuration above). This is the same deliberate, temporary plaintext-secret
+   simplification as `clientSecret`; a hardened version would use Entra ID / OAuthBearer auth against
+   the custom endpoint instead of a SAS-key JAAS config (see
+   [Connect to Eventstream using Microsoft Entra ID authentication](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/event-streams/custom-endpoint-entra-id-auth)),
+   removing the need to store any Kafka credential at all.
+
+> **If this key is ever accidentally committed:** treat it as compromised immediately — regenerate it
+> from the Details pane above (this invalidates the old key) — and if it was pushed to a remote,
+> scrub it from git history (e.g. `git filter-repo`) and force-push, in addition to rotating it.
+
 ## Prerequisites
 
 - A Microsoft Fabric workspace (capacity must be running) with a monitoring service
@@ -85,6 +133,8 @@ can't retroactively change a platform-level schedule that already decided to run
 - `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
+- The `ENV_OpenLineage` environment built and its Kafka secret populated manually (see **Building the
+  `ENV_OpenLineage` environment** above) if you plan to use the Spark/OpenLineage copy-event engine.
 - At least one existing OneLake **shortcut** in a monitored workspace that has already been read and
   saved as-is (via Spark or Warehouse) — this is what the copy-event engines actually detect. If you
   don't already have such a scenario to test against, see **Optional: simulate a test scenario** below.

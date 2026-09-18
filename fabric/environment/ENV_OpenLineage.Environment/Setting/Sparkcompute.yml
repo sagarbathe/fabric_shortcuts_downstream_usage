@@ -1,0 +1,27 @@
+enable_native_execution_engine: false
+driver_cores: 4
+driver_memory: 28g
+executor_cores: 4
+executor_memory: 28g
+dynamic_executor_allocation:
+  enabled: true
+  min_executors: 1
+  max_executors: 2
+spark_conf:
+  spark.extraListeners: io.openlineage.spark.agent.OpenLineageSparkListener
+  spark.openlineage.transport.type: kafka
+  spark.openlineage.transport.topicName: esehbnjzmxu954h0iqynlc_eh
+  spark.openlineage.transport.properties.bootstrap.servers: esehbnjzmxu954h0iqynlc.servicebus.windows.net:9093
+  spark.openlineage.transport.properties.security.protocol: SASL_SSL
+  spark.openlineage.transport.properties.sasl.mechanism: PLAIN
+  spark.openlineage.transport.properties.key.serializer: org.apache.kafka.common.serialization.StringSerializer
+  spark.openlineage.transport.properties.value.serializer: org.apache.kafka.common.serialization.StringSerializer
+  spark.openlineage.namespace: shortcut_monitoring
+  spark.openlineage.facets.disabled: '[]'
+  spark.jars.packages: io.openlineage:openlineage-spark_2.12:1.53.0
+  # DO NOT commit a real value here. Fill in manually after deploying to Fabric (see README's
+  # "Building the ENV_OpenLineage environment" section) with the Eventstream custom endpoint's
+  # live Kafka connection string, obtained from the Fabric portal (Eventstream -> source node ->
+  # Details pane -> Kafka tab) -- never store it in this file once populated for real.
+  spark.openlineage.transport.properties.sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="$ConnectionString" password="<FILL-IN-MANUALLY-DO-NOT-COMMIT>";
+runtime_version: 1.3
