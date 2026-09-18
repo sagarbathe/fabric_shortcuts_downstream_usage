@@ -114,7 +114,42 @@ per engine so you have something for the detection notebooks to find:
 
 ## Deployment
 
-Import/sync these items into a Fabric workspace (e.g. via workspace Git integration), attach the
-notebooks to `LH_ShortcutMonitoring`, populate `config.json`, and enable
-`PL_ShortcutMonitoringOrchestrator`'s schedule (Fabric portal → pipeline → Settings → Schedule) once
-validated.
+### Option A: Fabric Git integration (recommended, used to build this solution)
+
+Connect the target Fabric workspace directly to this repo (or a branch/fork of it) so items sync
+in both directions through the Fabric portal — this is how the items in this repo were originally
+authored and kept in sync.
+
+1. Follow [Get started with Git integration](https://learn.microsoft.com/en-us/fabric/cicd/git-integration/git-get-started)
+   to connect the workspace (Workspace settings → Git integration), pointing the connection at the
+   folder in this repo containing the `fabric/` item folders (see the Fabric Git sync note above —
+   the workspace's own folder structure must mirror `fabric/notebooks/`, `fabric/pipelines/`,
+   `fabric/environment/`, `fabric/eventstreams/`).
+2. Sync from Git into the workspace.
+3. Attach the notebooks to `LH_ShortcutMonitoring`, populate `config.json`, and enable
+   `PL_ShortcutMonitoringOrchestrator`'s schedule (Fabric portal → pipeline → Settings → Schedule)
+   once validated.
+
+### Option B: Scripted deployment via the Fabric REST API / `fabric-cicd`
+
+For CI/CD (GitHub Actions/Azure DevOps) or environments where a live Git-connected workspace isn't
+practical, deploy the same item folders programmatically instead of through the portal's Git pane:
+
+- **[`fabric-cicd`](https://github.com/microsoft/fabric-cicd)** — Microsoft's open-source Python
+  library purpose-built for this: point it at a workspace ID and this repo's `fabric/` directory and
+  it publishes (or removes orphaned) Notebook/DataPipeline/Environment/Eventstream items directly via
+  the Fabric REST API, with YAML-based parameterization for per-environment values (dev/test/prod
+  workspace IDs, connection strings, etc.). See the
+  [tutorial](https://learn.microsoft.com/en-us/fabric/cicd/tutorial-fabric-cicd-local) for a working
+  example, and the [official CI/CD article](https://learn.microsoft.com/en-us/rest/api/fabric/articles/fabric-ci-cd) for how it relates to the raw Items/Folders REST APIs.
+- **Raw Fabric REST API** — the same approach used to build this solution's pipeline/folders in this
+  session: authenticate (Azure CLI / service principal token for `https://api.fabric.microsoft.com`),
+  then call the [Items](https://learn.microsoft.com/en-us/rest/api/fabric/core/items) and
+  [Folders](https://learn.microsoft.com/en-us/rest/api/fabric/core/folders) APIs directly
+  (create/update item definitions, create folders, move items) from a script — more control, more
+  boilerplate than `fabric-cicd`, useful for one-off automation or when you need something the
+  library doesn't yet support.
+- **Fabric Deployment Pipelines** — once the solution is deployed once, Fabric's built-in
+  [deployment pipelines](https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/intro-to-deployment-pipelines)
+  feature can promote it across Dev → Test → Prod workspaces with environment-specific rules, as an
+  alternative/complement to re-running Git sync or `fabric-cicd` per environment.
