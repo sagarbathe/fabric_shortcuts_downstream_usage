@@ -10,7 +10,7 @@ See [`docs/architecture/Shortcut Monitoring Solution - Design Document.md`](docs
 for the full design (architecture, data model, thresholds, rules).
 
 **Scope:** only the **Spark** and **Warehouse** copy-event engines are implemented. **Dataflow Gen2
-detection is designed in the doc (§4.3) but not built** — no notebook exists for it in this repo.
+detection is designed in the doc (§4.3) but not built** — planned for next version.
 
 ## Repo layout
 
