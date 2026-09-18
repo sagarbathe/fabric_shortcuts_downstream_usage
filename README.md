@@ -113,8 +113,7 @@ To rebuild it from scratch (or verify an existing one):
    org.apache.kafka.common.security.plain.PlainLoginModule required username="$ConnectionString" password="<paste the Kafka connection string here>";
    ```
 
-   **Never commit the real value.** `Sparkcompute.yml` in this repo only ever contains the placeholder
-   `password="<FILL-IN-MANUALLY-DO-NOT-COMMIT>"` — paste the real value directly into the environment's
+   **Never commit the real value.** `Sparkcompute.yml` in this repo only ever contains a placeholder value — paste the real value directly into the environment's
    Spark compute settings in the Fabric portal after deployment, exactly like `config.json`'s
    `clientSecret` (see Configuration above). This is the same deliberate, temporary plaintext-secret
    simplification as `clientSecret`; a hardened version would use Entra ID / OAuthBearer auth against
@@ -134,7 +133,12 @@ To rebuild it from scratch (or verify an existing one):
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
 - The `ENV_OpenLineage` environment built and its Kafka secret populated manually (see **Building the
-  `ENV_OpenLineage` environment** above) if you plan to use the Spark/OpenLineage copy-event engine.
+  `ENV_OpenLineage` environment** above), **and explicitly attached as the Spark session environment**
+  on `NB_OpenLineage_Validate.Notebook` and `NB_CopyEventDetection_SparkKafka.Notebook` (notebook →
+  **Environment** dropdown in the top toolbar) — if you plan to use the Spark/OpenLineage copy-event
+  engine. Fabric notebooks don't inherit a workspace-default environment automatically for this
+  purpose; without this environment attached, `OpenLineageSparkListener` never loads, no events reach
+  Kafka, and the Spark engine silently detects nothing.
 - At least one existing OneLake **shortcut** in a monitored workspace that has already been read and
   saved as-is (via Spark or Warehouse) — this is what the copy-event engines actually detect. If you
   don't already have such a scenario to test against, see **Optional: simulate a test scenario** below.
