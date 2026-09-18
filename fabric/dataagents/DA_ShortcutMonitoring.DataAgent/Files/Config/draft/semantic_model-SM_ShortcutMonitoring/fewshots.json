@@ -1,0 +1,25 @@
+{
+  "$schema": "1.0.0",
+  "fewShots": [
+    {
+      "id": "63c32878-490a-4b42-b10b-fb22caa60280",
+      "question": "How many copy events have been flagged as read-and-saved-as-is this month?",
+      "query": "EVALUATE SUMMARIZECOLUMNS(\"Flagged Copy Events\", [Flagged Copy Events]) -- filter FactCopyEvent[Detected At] to the current month in the report/query context"
+    },
+    {
+      "id": "7917f15c-fce1-4f8a-b365-7be489fa85c1",
+      "question": "Which duplicate shortcut groups are high severity?",
+      "query": "EVALUATE FILTER(FactDuplicateShortcutGroup, FactDuplicateShortcutGroup[severity] = \"High\")"
+    },
+    {
+      "id": "95af509f-2a08-44ea-8d96-eb930fd1c535",
+      "question": "Which copy events read from a shortcut that has since been deleted?",
+      "query": "EVALUATE FILTER(FactCopyEvent, FactCopyEvent[Source Shortcut Exists Now] = FALSE)"
+    },
+    {
+      "id": "5581cb70-a406-45a3-a31e-e8b08a13d65f",
+      "question": "How many shortcuts were added vs removed in the last 24 hours?",
+      "query": "EVALUATE SUMMARIZECOLUMNS(FactShortcutInventoryDiff[change_type], \"Count\", COUNTROWS(FactShortcutInventoryDiff)) -- filter snapshot_ts to the last 24 hours"
+    }
+  ]
+}
