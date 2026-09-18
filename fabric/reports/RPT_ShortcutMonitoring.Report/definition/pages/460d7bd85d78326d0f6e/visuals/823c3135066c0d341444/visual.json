@@ -115,7 +115,7 @@
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
                       "Entity": "FactDuplicateShortcutGroup"

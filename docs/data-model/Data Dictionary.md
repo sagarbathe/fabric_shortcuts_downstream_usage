@@ -156,6 +156,7 @@ engine.** This is the core fact table the whole solution exists to populate.
 | `engine` | `STRING` | Fabric engine that executed the copy: `Warehouse` or `SparkKafka` (Dataflow Gen2 is a separate, not-yet-implemented future engine). |
 | `matched_shortcut_name` | `STRING` | Name of the OneLake shortcut the statement/notebook read from (matched against `DimShortcut`). |
 | `matched_shortcut_database` | `STRING` | Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from `hosting_item_name` for cross-item copies). |
+| `shortcut_sk` | `BIGINT` | Deterministic surrogate key of the matched shortcut, looked up from `DimShortcut.shortcut_sk` at detection time and stored as a real, materialized column (not derived at query time) — this is what lets the semantic model relate `FactCopyEvent` to `DimShortcut` under Direct Lake, which cannot use a calculated column as a relationship key. NULL if the matched shortcut couldn't be resolved to a `shortcut_sk` at detection time. Existing tables are migrated/backfilled automatically (see the migration-guard cell in both copy-event notebooks). |
 | `dest_table` | `STRING` | Destination table name the SELECT/write was saved into. |
 | `source_column_count` | `INT` | Total column count of the shortcut source table. |
 | `dest_column_count` | `INT` | Column count actually written to the destination table. |
@@ -209,9 +210,12 @@ not analytical data — excluded from the semantic model and reports.
 
 The semantic model (`SM_ShortcutMonitoring`, see `fabric/semanticmodels/`) is built on the **final,
 user-facing analytical tables only**: `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`,
-and `FactShortcutInventoryDiff`. `vw_FactCopyEvent_SourceStatus`'s two enrichment columns
-(`source_shortcut_exists_now`, `source_removed_ts`) are reproduced as native measures/calculated
-columns *inside* the semantic model instead of importing the view as a fifth table — this avoids a
-second, overlapping copy of the `FactCopyEvent` grain inside the model (see the semantic model's own
-documentation for why, and the `shortcut_sk` bridge column added to relate `FactCopyEvent` to
-`DimShortcut`). Watermark tables are excluded entirely — they carry no analytical value.
+and `FactShortcutInventoryDiff`, in **Direct Lake** mode (reads Delta files directly — no import/
+refresh needed). `vw_FactCopyEvent_SourceStatus`'s two enrichment columns
+(`source_shortcut_exists_now`, `source_removed_ts`) are reproduced as calculated columns *inside* the
+semantic model instead of importing the view as a fifth table — this avoids a second, overlapping
+copy of the `FactCopyEvent` grain inside the model. `FactCopyEvent`'s `shortcut_sk` column (see above)
+is a **real, materialized Lakehouse column**, not a semantic-model calculated column — Direct Lake
+relationships cannot use a calculated column as a join key, so the lookup against `DimShortcut` is
+done once by the copy-event notebooks at write time instead of at query time in DAX. Watermark tables
+are excluded entirely — they carry no analytical value.

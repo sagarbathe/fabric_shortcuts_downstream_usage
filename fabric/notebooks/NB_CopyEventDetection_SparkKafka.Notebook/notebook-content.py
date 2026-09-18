@@ -125,6 +125,41 @@ except Exception as e:
     log_error_to_lakehouse("load_config", e)
     raise
 
+# --- One-time schema migration guard: add shortcut_sk to FactCopyEvent if the table already existed
+# from before this column was introduced (needed as a real, materialized Delta column - not a
+# semantic-model calculated column - so Direct Lake relationships can join on it). Placed BEFORE the
+# enabledEngines exit check below so it always runs on every invocation of either copy-event notebook,
+# even when this specific engine is disabled this run. Safe/idempotent: no-op once migrated. Identical
+# logic to NB_CopyEventDetection_Warehouse's guard - only one of the two needs to actually run it on
+# any given pipeline execution, but it's harmless/idempotent to have it in both.
+try:
+    if spark.catalog.tableExists("FactCopyEvent"):
+        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
+        if "shortcut_sk" not in existing_fields:
+            spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (shortcut_sk BIGINT)")
+            print("Migrated FactCopyEvent: added shortcut_sk column.")
+        else:
+            print("FactCopyEvent already has shortcut_sk column - no migration needed.")
+
+        blank_count = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
+        if blank_count > 0 and spark.catalog.tableExists("DimShortcut"):
+            spark.sql("""
+                MERGE INTO FactCopyEvent f
+                USING DimShortcut d
+                ON f.hosting_workspace_id = d.hosting_workspace_id
+                   AND f.matched_shortcut_database = d.hosting_item_name
+                   AND f.matched_shortcut_name = d.shortcut_name
+                   AND f.shortcut_sk IS NULL
+                WHEN MATCHED THEN UPDATE SET f.shortcut_sk = d.shortcut_sk
+            """)
+            remaining = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
+            print(f"Backfilled shortcut_sk for {blank_count - remaining} historical row(s); {remaining} still unresolved (source shortcut no longer in DimShortcut).")
+        else:
+            print("No blank shortcut_sk rows to backfill (or DimShortcut not yet populated).")
+except Exception as e:
+    log_error_to_lakehouse("migrate_factcopyevent_shortcut_sk", e)
+    raise
+
 # config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every
 # run while still allowing an environment (e.g. a dev workspace with no Eventstream wired up) to skip
 # this engine entirely without editing the orchestrating pipeline - just flip config, no redeploy needed.
@@ -154,7 +189,7 @@ print(f"Source events table: Tables/{SOURCE_EVENTS_TABLE}")
 #     considers rows appended after the last run's max EventEnqueuedUtcTime (requirement #4: no full
 #     rescan). Single-row table (unlike the file-transport notebook's per-file watermark) since there
 #     is exactly one shared source table here.
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType, TimestampType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType, TimestampType, LongType
 from pyspark.sql import functions as F
 
 WATERMARK_TABLE = "SparkKafkaLineageWatermark"
@@ -369,6 +404,7 @@ try:
         cw["matched_shortcut_hosting_workspace_id"] = matched_shortcut["hosting_workspace_id"]
         cw["matched_shortcut_hosting_workspace_name"] = matched_shortcut["hosting_workspace_name"]
         cw["matched_shortcut_hosting_item_name"] = matched_shortcut["hosting_item_name"]
+        cw["matched_shortcut_sk"] = matched_shortcut["shortcut_sk"]
         input_schema_fields = cw["inputs"][0].get("facets", {}).get("schema", {}).get("fields", [])
         cw["input_column_count"] = len(input_schema_fields)
         matched_writes.append(cw)
@@ -428,6 +464,7 @@ try:
             "engine": "SparkKafka",
             "matched_shortcut_name": cw["matched_shortcut_name"],
             "matched_shortcut_database": cw["matched_shortcut_hosting_item_name"],
+            "shortcut_sk": cw["matched_shortcut_sk"],
             "dest_table": cw["output_name"],
             "source_column_count": input_col_count,
             "dest_column_count": dest_col_count,
@@ -468,6 +505,7 @@ FACT_COPY_EVENT_SCHEMA = StructType([
     StructField("engine", StringType()),
     StructField("matched_shortcut_name", StringType()),
     StructField("matched_shortcut_database", StringType()),
+    StructField("shortcut_sk", LongType()),
     StructField("dest_table", StringType()),
     StructField("source_column_count", IntegerType()),
     StructField("dest_column_count", IntegerType()),

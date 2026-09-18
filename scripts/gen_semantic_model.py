@@ -5,24 +5,30 @@ Not part of the deployed solution itself - a build-time authoring helper only.
 import json
 import uuid
 
-SQL_ENDPOINT = "cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com"
-LAKEHOUSE_SQL_DB = "LH_ShortcutMonitoring"
+WORKSPACE_ID = "c5c50c6e-30d1-4d2e-8766-d82917e13592"
+LAKEHOUSE_ID = "c61c659f-ecba-4de8-a5b7-25885eb3021f"
+DIRECT_LAKE_EXPRESSION_NAME = "DirectLake - LH_ShortcutMonitoring"
 
 
 def tag():
     return str(uuid.uuid4())
 
 
-def m_source(table_name):
+def direct_lake_expression():
+    """Shared named expression all Direct Lake table partitions reference via expressionSource.
+    Uses AzureStorage.DataLake (not Sql.Database) per Direct Lake authoring guidance - this points
+    straight at the Lakehouse's OneLake Delta files, not the SQL analytics endpoint."""
     return {
-        "type": "m",
+        "name": DIRECT_LAKE_EXPRESSION_NAME,
+        "kind": "m",
         "expression": [
             "let",
-            f"    Source = Sql.Database(\"{SQL_ENDPOINT}\", \"{LAKEHOUSE_SQL_DB}\"),",
-            f"    dbo_{table_name} = Source{{[Schema=\"dbo\",Item=\"{table_name}\"]}}[Data]",
+            f"    Source = AzureStorage.DataLake(\"https://onelake.dfs.fabric.microsoft.com/{WORKSPACE_ID}/{LAKEHOUSE_ID}\", [HierarchicalNavigation=true])",
             "in",
-            f"    dbo_{table_name}",
+            "    Source",
         ],
+        "lineageTag": tag(),
+        "annotations": [{"name": "PBI_ResultType", "value": "Table"}],
     }
 
 
@@ -43,20 +49,12 @@ def col(name, dataType, description, hidden=False, formatString=None, summarizeB
     return c
 
 
-def calc_col(name, dataType, expression, description, hidden=False, formatString=None, summarizeBy="none"):
-    c = {
-        "name": name,
-        "dataType": dataType,
-        "type": "calculated",
-        "expression": expression,
-        "summarizeBy": summarizeBy,
-        "isHidden": hidden,
-        "lineageTag": tag(),
-        "description": description,
-    }
-    if formatString:
-        c["formatString"] = formatString
-    return c
+
+# NOTE: No calculated columns or calculated tables are used anywhere in this model (Direct Lake
+# calculated columns are query-time-only/preview and cannot be relationship keys, and per explicit
+# instruction we avoid them altogether even where they'd be legal). Every derived value below is a
+# measure instead - see e.g. "Group Member Count", "Detected At", "Query Start At",
+# "Source Shortcut Exists Now", "Source Removed At" measures on FactDuplicateShortcutGroup/FactCopyEvent.
 
 
 def measure(name, expression, description, formatString=None):
@@ -71,11 +69,17 @@ def measure(name, expression, description, formatString=None):
     return m
 
 
-def partition(table_name, source):
+def partition(table_name, schema_name="dbo"):
+    """Direct Lake partition: no M query, just an entity reference into the shared named expression."""
     return {
         "name": f"{table_name}",
-        "mode": "import",
-        "source": source,
+        "mode": "directLake",
+        "source": {
+            "type": "entity",
+            "entityName": table_name,
+            "schemaName": schema_name,
+            "expressionSource": DIRECT_LAKE_EXPRESSION_NAME,
+        },
     }
 
 
@@ -113,7 +117,7 @@ DimShortcut = {
         measure("Internal OneLake Shortcuts", "CALCULATE([Total Shortcuts], DimShortcut[is_internal_onelake] = TRUE)", "Count of currently-existing shortcuts pointing at another OneLake item (eligible for duplicate detection)."),
         measure("External Shortcuts", "[Total Shortcuts] - [Internal OneLake Shortcuts]", "Count of currently-existing shortcuts pointing outside OneLake (S3, ADLS, GCS, Dataverse, etc.)."),
     ],
-    "partitions": [partition("DimShortcut", m_source("DimShortcut"))],
+    "partitions": [partition("DimShortcut")],
 }
 
 # --- FactShortcutInventoryDiff --------------------------------------------
@@ -150,7 +154,7 @@ FactShortcutInventoryDiff = {
         measure("Shortcuts Removed", "CALCULATE(COUNTROWS(FactShortcutInventoryDiff), FactShortcutInventoryDiff[change_type] = \"removed\")", "Count of shortcut-deletion events in the current filter context."),
         measure("Net Shortcut Change", "[Shortcuts Added] - [Shortcuts Removed]", "Net change in shortcut count in the current filter context (positive = growing, negative = shrinking)."),
     ],
-    "partitions": [partition("FactShortcutInventoryDiff", m_source("FactShortcutInventoryDiff"))],
+    "partitions": [partition("FactShortcutInventoryDiff")],
 }
 
 # --- FactDuplicateShortcutGroup --------------------------------------------
@@ -179,20 +183,29 @@ FactDuplicateShortcutGroup = {
         col("source_item_id", "string", "Item GUID of the common source all group members point to.", hidden=True),
         col("source_item_name", "string", "Display name of the common source item."),
         col("source_path", "string", "Common source path all group members point to - this is the field that makes them duplicates."),
-        col("group_member_count", "string", "Total number of shortcuts in this duplicate group, as text (raw Delta type). Use the 'Group Member Count' calculated column for numeric aggregation.", hidden=True),
+        col("group_member_count", "string", "Total number of shortcuts in this duplicate group, as text (raw Delta type). Use the 'Group Member Count' measure for numeric aggregation.", hidden=True),
         col("severity", "string", "High = duplicates share the same hosting item. Medium = duplicates share the hosting workspace but live in different hosting items."),
         col("explanation", "string", "Human-readable reason for the assigned severity."),
-        col("detected_ts", "string", "UTC timestamp when this duplicate group was last (re)computed, as text (raw Delta type). Use the 'Detected At' calculated column for a proper datetime.", hidden=True),
-        calc_col("Group Member Count", "int64", "VALUE(FactDuplicateShortcutGroup[group_member_count])", "Numeric version of group_member_count, for aggregation/sorting in visuals."),
-        calc_col("Detected At", "dateTime", "DATETIMEVALUE(SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \"))", "detected_ts parsed into a proper datetime, for use in date slicers/axes.", formatString="General Date"),
+        col("detected_ts", "string", "UTC timestamp when this duplicate group was last (re)computed, as text (raw Delta type). Use the 'Detected At' measure for a proper datetime.", hidden=True),
     ],
     "measures": [
         measure("Duplicate Groups", "DISTINCTCOUNT(FactDuplicateShortcutGroup[duplicate_group_id])", "Count of distinct duplicate-shortcut groups in the current filter context."),
         measure("High Severity Groups", "CALCULATE([Duplicate Groups], FactDuplicateShortcutGroup[severity] = \"High\")", "Count of distinct High-severity duplicate groups (duplicates in the same hosting item)."),
         measure("Medium Severity Groups", "CALCULATE([Duplicate Groups], FactDuplicateShortcutGroup[severity] = \"Medium\")", "Count of distinct Medium-severity duplicate groups (duplicates in the same workspace, different hosting items)."),
         measure("Duplicate Shortcuts (rows)", "COUNTROWS(FactDuplicateShortcutGroup)", "Total count of individual shortcuts that are members of any duplicate group (not deduplicated by group)."),
+        measure(
+            "Group Member Count",
+            "AVERAGEX(FactDuplicateShortcutGroup, VALUE(FactDuplicateShortcutGroup[group_member_count]))",
+            "Numeric version of group_member_count, for aggregation/sorting in visuals. A measure (not a calculated column) because Direct Lake models in this solution use measures only.",
+        ),
+        measure(
+            "Duplicate Group Detected At",
+            "MAXX(FactDuplicateShortcutGroup, DATETIMEVALUE(SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \")))",
+            "detected_ts parsed into a proper datetime, for use in date slicers/axes.",
+            formatString="General Date",
+        ),
     ],
-    "partitions": [partition("FactDuplicateShortcutGroup", m_source("FactDuplicateShortcutGroup"))],
+    "partitions": [partition("FactDuplicateShortcutGroup")],
 }
 
 # --- FactCopyEvent ----------------------------------------------------------
@@ -206,8 +219,8 @@ FactCopyEvent = {
         "equivalent) OR retention_pct > threshold_pct_at_detection, even if extra new columns were "
         "also added - this is the core signal the whole solution exists to raise. This table does NOT "
         "physically include vw_FactCopyEvent_SourceStatus's two enrichment columns - they are "
-        "reproduced here as the 'Source Shortcut Exists Now' and 'Source Removed At' calculated "
-        "columns instead, to avoid importing a second overlapping copy of this same grain."
+        "reproduced here as the 'Source Shortcut Exists Now' and 'Source Removed At' measures "
+        "instead, to avoid importing a second overlapping copy of this same grain."
     ),
     "lineageTag": tag(),
     "columns": [
@@ -219,6 +232,7 @@ FactCopyEvent = {
         col("engine", "string", "Fabric engine that executed the copy: Warehouse or SparkKafka. (Dataflow Gen2 is designed but not implemented - see design doc.)"),
         col("matched_shortcut_name", "string", "Name of the OneLake shortcut the statement/notebook read from (matched against DimShortcut)."),
         col("matched_shortcut_database", "string", "Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from hosting_item_name for cross-item copies)."),
+        col("shortcut_sk", "int64", "Deterministic surrogate key of the matched shortcut, looked up from DimShortcut.shortcut_sk by the copy-event notebooks at detection time and stored as a real Delta column - the join key to DimShortcut (Direct Lake relationships cannot use a calculated column as a key). Blank if the matched shortcut could not be resolved at detection time.", hidden=True),
         col("dest_table", "string", "Destination table name the SELECT/write was saved into."),
         col("source_column_count", "int64", "Total column count of the shortcut source table."),
         col("dest_column_count", "int64", "Column count actually written to the destination table."),
@@ -227,37 +241,8 @@ FactCopyEvent = {
         col("is_select_star", "boolean", "TRUE if the statement used SELECT * (Warehouse) / retained all columns (SparkKafka)."),
         col("is_shortcut_read_and_saved_as_is", "boolean", "TRUE if is_select_star OR retention_pct > threshold_pct_at_detection - the flag this whole solution exists to raise."),
         col("threshold_pct_at_detection", "double", "Configurable retention threshold (config.detection.columnRetentionThresholdPercent) in effect when this row was computed.", formatString="0.0\"%\""),
-        col("query_start_time", "string", "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' calculated column for a proper datetime.", hidden=True),
-        col("detected_ts", "string", "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' calculated column for a proper datetime.", hidden=True),
-        calc_col(
-            "shortcut_sk", "int64",
-            "LOOKUPVALUE(\n\tDimShortcut[shortcut_sk],\n\tDimShortcut[hosting_workspace_id], FactCopyEvent[hosting_workspace_id],\n\tDimShortcut[hosting_item_name], FactCopyEvent[matched_shortcut_database],\n\tDimShortcut[shortcut_name], FactCopyEvent[matched_shortcut_name]\n)",
-            "Bridge key added at the semantic-model layer only (FactCopyEvent has no native shortcut_sk column) - resolves the matched shortcut's surrogate key so this table can relate to DimShortcut. Blank if the matched shortcut is no longer in the current DimShortcut snapshot.",
-            hidden=True,
-        ),
-        calc_col(
-            "Source Shortcut Exists Now", "boolean",
-            "NOT ISBLANK(RELATED(DimShortcut[shortcut_name]))",
-            "TRUE if the shortcut this copy event read from still exists in the current DimShortcut snapshot. Reproduces vw_FactCopyEvent_SourceStatus.source_shortcut_exists_now at the semantic-model layer.",
-        ),
-        calc_col(
-            "Source Removed At", "dateTime",
-            "CALCULATE(\n\tMAX(FactShortcutInventoryDiff[snapshot_ts]),\n\tFactShortcutInventoryDiff[hosting_workspace_id] = FactCopyEvent[hosting_workspace_id],\n\tFactShortcutInventoryDiff[hosting_item_name] = FactCopyEvent[matched_shortcut_database],\n\tFactShortcutInventoryDiff[shortcut_name] = FactCopyEvent[matched_shortcut_name],\n\tFactShortcutInventoryDiff[change_type] = \"removed\"\n)",
-            "If the source shortcut no longer exists, the most recent time its removal was detected. Reproduces vw_FactCopyEvent_SourceStatus.source_removed_ts at the semantic-model layer. Blank if the shortcut still exists or was never seen being removed.",
-            formatString="General Date",
-        ),
-        calc_col(
-            "Detected At", "dateTime",
-            "DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[detected_ts], 19), \"T\", \" \"))",
-            "detected_ts parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
-            formatString="General Date",
-        ),
-        calc_col(
-            "Query Start At", "dateTime",
-            "DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[query_start_time], 19), \"T\", \" \"))",
-            "query_start_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
-            formatString="General Date",
-        ),
+        col("query_start_time", "string", "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' measure for a proper datetime.", hidden=True),
+        col("detected_ts", "string", "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' measure for a proper datetime.", hidden=True),
     ],
     "measures": [
         measure("Total Copy Events", "COUNTROWS(FactCopyEvent)", "Count of all detected copy events (both engines) in the current filter context."),
@@ -266,9 +251,36 @@ FactCopyEvent = {
         measure("Avg Retention %", "AVERAGE(FactCopyEvent[retention_pct])", "Average column-retention percentage across copy events in the current filter context.", formatString="0.0\"%\""),
         measure("Copy Events - Warehouse", "CALCULATE([Total Copy Events], FactCopyEvent[engine] = \"Warehouse\")", "Count of copy events detected by the Warehouse engine."),
         measure("Copy Events - Spark", "CALCULATE([Total Copy Events], FactCopyEvent[engine] = \"SparkKafka\")", "Count of copy events detected by the Spark/OpenLineage engine."),
-        measure("Copy Events - Orphaned Source", "CALCULATE([Total Copy Events], FactCopyEvent[Source Shortcut Exists Now] = FALSE)", "Count of copy events whose source shortcut has since been deleted."),
+        measure(
+            "Source Shortcut Exists Now",
+            "VAR ws = SELECTEDVALUE(FactCopyEvent[hosting_workspace_id])\nVAR db = SELECTEDVALUE(FactCopyEvent[matched_shortcut_database])\nVAR sn = SELECTEDVALUE(FactCopyEvent[matched_shortcut_name])\nRETURN\n\tNOT ISEMPTY(\n\t\tFILTER(\n\t\t\tALL(DimShortcut),\n\t\t\tDimShortcut[hosting_workspace_id] = ws && DimShortcut[hosting_item_name] = db && DimShortcut[shortcut_name] = sn\n\t\t)\n\t)",
+            "TRUE if the shortcut this copy event read from still exists in the current DimShortcut snapshot. Reproduces vw_FactCopyEvent_SourceStatus.source_shortcut_exists_now at the semantic-model layer. A measure (not a calculated column) - evaluate it per-row in a table/matrix visual filtered to one FactCopyEvent row.",
+        ),
+        measure(
+            "Source Removed At",
+            "VAR ws = SELECTEDVALUE(FactCopyEvent[hosting_workspace_id])\nVAR db = SELECTEDVALUE(FactCopyEvent[matched_shortcut_database])\nVAR sn = SELECTEDVALUE(FactCopyEvent[matched_shortcut_name])\nRETURN\n\tCALCULATE(\n\t\tMAX(FactShortcutInventoryDiff[snapshot_ts]),\n\t\tALL(FactShortcutInventoryDiff),\n\t\tFactShortcutInventoryDiff[hosting_workspace_id] = ws,\n\t\tFactShortcutInventoryDiff[hosting_item_name] = db,\n\t\tFactShortcutInventoryDiff[shortcut_name] = sn,\n\t\tFactShortcutInventoryDiff[change_type] = \"removed\"\n\t)",
+            "If the source shortcut no longer exists, the most recent time its removal was detected. Reproduces vw_FactCopyEvent_SourceStatus.source_removed_ts at the semantic-model layer. Blank if the shortcut still exists or was never seen being removed.",
+            formatString="General Date",
+        ),
+        measure(
+            "Copy Event Detected At",
+            "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[detected_ts], 19), \"T\", \" \")))",
+            "detected_ts parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            formatString="General Date",
+        ),
+        measure(
+            "Query Start At",
+            "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[query_start_time], 19), \"T\", \" \")))",
+            "query_start_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            formatString="General Date",
+        ),
+        measure(
+            "Copy Events - Orphaned Source",
+            "CALCULATE([Total Copy Events], FILTER(FactCopyEvent, [Source Shortcut Exists Now] = FALSE()))",
+            "Count of copy events whose source shortcut has since been deleted.",
+        ),
     ],
-    "partitions": [partition("FactCopyEvent", m_source("FactCopyEvent"))],
+    "partitions": [partition("FactCopyEvent")],
 }
 
 TABLES = [DimShortcut, FactShortcutInventoryDiff, FactDuplicateShortcutGroup, FactCopyEvent]
@@ -301,7 +313,7 @@ RELATIONSHIPS = [
 ]
 
 model_bim = {
-    "compatibilityLevel": 1567,
+    "compatibilityLevel": 1604,
     "model": {
         "culture": "en-US",
         "defaultPowerBIDataSourceVersion": "powerBI_V3",
@@ -313,6 +325,7 @@ model_bim = {
         ],
         "tables": TABLES,
         "relationships": RELATIONSHIPS,
+        "expressions": [direct_lake_expression()],
     },
 }
 
