@@ -23,10 +23,10 @@
                       "Entity": "FactCopyEvent"
                     }
                   },
-                  "Property": "Detected At"
+                  "Property": "detected_ts"
                 }
               },
-              "queryRef": "FactCopyEvent.Detected At",
+              "queryRef": "FactCopyEvent.detected_ts",
               "active": true
             }
           ]

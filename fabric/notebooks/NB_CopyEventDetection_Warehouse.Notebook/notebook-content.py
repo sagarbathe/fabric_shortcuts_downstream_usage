@@ -78,6 +78,39 @@ except Exception as e:
     log_error_to_lakehouse("load_config", e)
     raise
 
+# --- One-time schema migration guard: add shortcut_sk to FactCopyEvent if the table already existed
+# from before this column was introduced (needed as a real, materialized Delta column - not a
+# semantic-model calculated column - so Direct Lake relationships can use it). Placed BEFORE the
+# enabledEngines exit check below so it always runs on every invocation of either copy-event notebook,
+# even when this specific engine is disabled this run. Safe/idempotent: no-op once migrated.
+try:
+    if spark.catalog.tableExists("FactCopyEvent"):
+        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
+        if "shortcut_sk" not in existing_fields:
+            spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (shortcut_sk BIGINT)")
+            print("Migrated FactCopyEvent: added shortcut_sk column.")
+        else:
+            print("FactCopyEvent already has shortcut_sk column - no migration needed.")
+
+        blank_count = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
+        if blank_count > 0 and spark.catalog.tableExists("DimShortcut"):
+            spark.sql("""
+                MERGE INTO FactCopyEvent f
+                USING DimShortcut d
+                ON f.hosting_workspace_id = d.hosting_workspace_id
+                   AND f.matched_shortcut_database = d.hosting_item_name
+                   AND f.matched_shortcut_name = d.shortcut_name
+                   AND f.shortcut_sk IS NULL
+                WHEN MATCHED THEN UPDATE SET f.shortcut_sk = d.shortcut_sk
+            """)
+            remaining = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
+            print(f"Backfilled shortcut_sk for {blank_count - remaining} historical row(s); {remaining} still unresolved (source shortcut no longer in DimShortcut).")
+        else:
+            print("No blank shortcut_sk rows to backfill (or DimShortcut not yet populated).")
+except Exception as e:
+    log_error_to_lakehouse("migrate_factcopyevent_shortcut_sk", e)
+    raise
+
 # config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every
 # run while still allowing an environment (e.g. a dev workspace with no Warehouse items) to skip this
 # engine entirely without editing the orchestrating pipeline - just flip config, no redeploy needed.
@@ -408,9 +441,11 @@ try:
     # Latin1_General_100_BIN2_UTF8) - INFORMATION_SCHEMA.COLUMNS lookups downstream must use the real
     # original-case table name, not our lowercased matching key.
     shortcut_names_by_item_name = {}
+    shortcut_sk_lookup = {}
     for r in dim_shortcut_df.collect():
         key = (r["hosting_workspace_id"], r["hosting_item_name"].lower())
         shortcut_names_by_item_name.setdefault(key, {})[r["shortcut_name"].lower()] = r["shortcut_name"]
+        shortcut_sk_lookup[(r["hosting_workspace_id"], r["hosting_item_name"].lower(), r["shortcut_name"].lower())] = r["shortcut_sk"]
 
     def references_a_shortcut(row):
         for src in row["source_tables"]:
@@ -419,7 +454,12 @@ try:
             known_shortcuts = shortcut_names_by_item_name.get(key, {})
             leaf = src["table"].lower()
             if leaf in known_shortcuts:
-                return {"shortcut_name": known_shortcuts[leaf], "shortcut_database": referenced_item_name}
+                matched_name = known_shortcuts[leaf]
+                return {
+                    "shortcut_name": matched_name,
+                    "shortcut_database": referenced_item_name,
+                    "shortcut_sk": shortcut_sk_lookup.get((row["workspace_id"], referenced_item_name.lower(), leaf)),
+                }
         return None
 
     copy_events_from_shortcuts = []
@@ -430,6 +470,7 @@ try:
                 **row,
                 "matched_shortcut_name": match["shortcut_name"],
                 "matched_shortcut_database": match["shortcut_database"],
+                "matched_shortcut_sk": match["shortcut_sk"],
             })
 
     print(f"Of those, {len(copy_events_from_shortcuts)} statement(s) read FROM a known shortcut.")
@@ -505,6 +546,7 @@ try:
             "engine": "Warehouse",
             "matched_shortcut_name": row["matched_shortcut_name"],
             "matched_shortcut_database": row["matched_shortcut_database"],
+            "shortcut_sk": row["matched_shortcut_sk"],
             "dest_table": row["dest_table"],
             "source_column_count": source_col_count,
             "dest_column_count": dest_col_count,
@@ -532,7 +574,7 @@ except Exception as e:
 
 # CELL ********************
 
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType, LongType
 from pyspark.sql import functions as F
 
 FACT_COPY_EVENT_SCHEMA = StructType([
@@ -544,6 +586,7 @@ FACT_COPY_EVENT_SCHEMA = StructType([
     StructField("engine", StringType()),
     StructField("matched_shortcut_name", StringType()),
     StructField("matched_shortcut_database", StringType()),
+    StructField("shortcut_sk", LongType()),
     StructField("dest_table", StringType()),
     StructField("source_column_count", IntegerType()),
     StructField("dest_column_count", IntegerType()),
@@ -591,6 +634,7 @@ try:
             "engine": "Fabric engine that executed the copy: Warehouse (Spark and Dataflow Gen2 are separate future engines).",
             "matched_shortcut_name": "Name of the OneLake shortcut the statement read from (matched against DimShortcut).",
             "matched_shortcut_database": "Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from hosting_item_name for cross-item copies).",
+            "shortcut_sk": "Deterministic BIGINT surrogate key of the matched shortcut (looked up from DimShortcut.shortcut_sk at detection time) - a real, materialized column so Direct Lake relationships can join to DimShortcut on it. NULL if the matched shortcut could not be resolved to a shortcut_sk at detection time.",
             "dest_table": "Destination table name the SELECT was saved into.",
             "source_column_count": "Total column count of the shortcut source table.",
             "dest_column_count": "Column count actually written to the destination table.",

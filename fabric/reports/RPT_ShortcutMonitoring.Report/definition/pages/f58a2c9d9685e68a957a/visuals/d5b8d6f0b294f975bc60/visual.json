@@ -17,16 +17,16 @@
           "projections": [
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
                       "Entity": "FactCopyEvent"
                     }
                   },
-                  "Property": "Detected At"
+                  "Property": "Copy Event Detected At"
                 }
               },
-              "queryRef": "FactCopyEvent.Detected At",
+              "queryRef": "FactCopyEvent.Copy Event Detected At",
               "active": true
             },
             {
@@ -129,7 +129,7 @@
             },
             {
               "field": {
-                "Column": {
+                "Measure": {
                   "Expression": {
                     "SourceRef": {
                       "Entity": "FactCopyEvent"
