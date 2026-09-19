@@ -307,3 +307,45 @@ practical, deploy the same item folders programmatically instead of through the 
   [deployment pipelines](https://learn.microsoft.com/en-us/fabric/cicd/deployment-pipelines/intro-to-deployment-pipelines)
   feature can promote it across Dev → Test → Prod workspaces with environment-specific rules, as an
   alternative/complement to re-running Git sync or `fabric-cicd` per environment.
+
+### Deploying/updating the semantic model, report, and Data Agent
+
+`SM_ShortcutMonitoring.SemanticModel`, `RPT_ShortcutMonitoring.Report`, and
+`DA_ShortcutMonitoring.DataAgent` were authored and are redeployed using `scripts/deploy_item.ps1`
+(a thin wrapper over the Fabric Items REST API), not Git sync — this keeps the workflow scriptable
+and lets the model.bim/report/data-agent JSON be regenerated from `scripts/gen_semantic_model.py`,
+`scripts/gen_report.py`, `scripts/gen_data_agent.py` when the generator source changes.
+
+**Update an existing item in place** (most common case — e.g. after editing `gen_semantic_model.py`
+and regenerating `model.bim`):
+
+```powershell
+.\scripts\deploy_item.ps1 -SourceDir "fabric\semanticmodels\SM_ShortcutMonitoring.SemanticModel" -ExistingItemId "<item-guid>"
+```
+
+Same pattern for the report (`fabric\reports\RPT_ShortcutMonitoring.Report`) and Data Agent
+(`fabric\dataagents\DA_ShortcutMonitoring.DataAgent`). Find an item's GUID via
+`GET /v1/workspaces/{workspaceId}/items` (filter on `displayName`) if you don't already have it.
+
+**Create a brand-new item** (first-time deploy, or when in-place update isn't supported — see
+caveats below): omit `-ExistingItemId`. The script then `POST`s to
+`/v1/workspaces/{workspaceId}/items` instead of `updateDefinition`, and Fabric assigns a new item
+GUID. After creating a new semantic model this way, you must **repoint every dependent item** to
+its new GUID before redeploying them:
+- `fabric/reports/RPT_ShortcutMonitoring.Report/definition.pbir` → `datasetReference.byConnection.connectionString`'s `semanticmodelid=...`
+- `fabric/dataagents/DA_ShortcutMonitoring.DataAgent/Files/Config/draft/semantic_model-SM_ShortcutMonitoring/datasource.json` → `artifactId`
+
+**Two important caveats learned the hard way while building this solution:**
+
+1. **Converting an Import/DirectQuery semantic model to Direct Lake in place is not supported** by
+   `updateDefinition` — it fails with *"Converting existing tables or partitions from Import or
+   DirectQuery mode to Direct Lake is not supported."* You must delete the old semantic model item
+   and create a fresh one (new GUID), then repoint the report/Data Agent as above.
+2. **A report referencing a shared theme by name (`themeCollection.baseTheme`) must also ship the
+   actual theme JSON file** under `StaticResources/SharedResources/BaseThemes/<ThemeName>.json`
+   *and* a matching `resourcePackages` entry in `report.json` — a `model.bim`/report deploy that
+   only sets the theme name (no embedded file, no `resourcePackages`) is accepted by the API with
+   no error, but the report then hangs on a **blank screen with no error message** when opened in
+   the browser, because the client can't resolve the theme resource. `scripts/gen_report.py`
+   embeds `scripts/theme_CY24SU10.json` for exactly this reason — if you change themes, copy the
+   new theme's JSON alongside it and update `THEME_NAME` in the generator.
