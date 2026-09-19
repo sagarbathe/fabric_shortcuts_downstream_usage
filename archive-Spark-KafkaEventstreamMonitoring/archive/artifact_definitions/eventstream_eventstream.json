@@ -1,0 +1,51 @@
+{
+  "sources": [
+    {
+      "id": "a1b39954-804a-41ea-bae5-83c77c28a8bf",
+      "name": "OpenLineageCustomEndpoint",
+      "type": "CustomEndpoint",
+      "properties": {}
+    }
+  ],
+  "destinations": [
+    {
+      "id": "5e04537c-4974-4056-9fb9-ebf18a96ad30",
+      "name": "LH_ShortcutMonitoring_Sink",
+      "type": "Lakehouse",
+      "properties": {
+        "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592",
+        "itemId": "c61c659f-ecba-4de8-a5b7-25885eb3021f",
+        "schema": "",
+        "deltaTable": "ol_lineage_events_v2",
+        "minimumRows": 1,
+        "maximumDurationInSeconds": 60,
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "ES_OpenLineageEvents-stream"
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "id": "91fae783-9aae-4e13-85dc-a430d06d5b3d",
+      "name": "ES_OpenLineageEvents-stream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        {
+          "name": "OpenLineageCustomEndpoint"
+        }
+      ]
+    }
+  ],
+  "operators": [],
+  "compatibilityLevel": "1.1"
+}

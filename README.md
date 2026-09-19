@@ -225,16 +225,23 @@ To rebuild it from scratch (or verify an existing one):
 ## Prerequisites
 
 - A Microsoft Fabric workspace (capacity must be running) with a monitoring service principal (SP)
-  granted read access to all monitored workspaces. The SP must be added as **at least a Viewer** on
-  every workspace listed in `config.monitoredWorkspaces` — this can only be done by that workspace's
-  own admin/owner, not by this solution's deployment script, since it requires access the deployer may
-  not have over other teams' workspaces. Concretely, the SP's token is used two ways per monitored
-  workspace: (1) `GET /v1/workspaces/{id}/items` and `.../warehouses/{id}` (Fabric REST API — Viewer
-  role is sufficient) to enumerate shortcuts/Warehouses, and (2) a direct AAD-token JDBC connection to
-  each Warehouse's SQL analytics endpoint to query `queryinsights.exec_requests_history` (Warehouse
-  copy-event engine only) — Viewer's default SQL mapping is normally enough, but if a workspace has
-  locked-down Warehouse-level SQL security beyond the default role mapping, its owner may also need to
-  run `CREATE USER [<sp-name>] FROM EXTERNAL PROVIDER` + `GRANT SELECT` explicitly in that Warehouse.
+  granted read access to all monitored workspaces. This can only be granted by each workspace's own
+  admin/owner, not by this solution's deployment script, since it requires access the deployer may not
+  have over other teams' workspaces. The SP's token is used two ways per monitored workspace, needing
+  two separate (and separately grantable) permissions:
+  1. `GET /v1/workspaces/{id}/items` and `.../warehouses/{id}` (Fabric REST API, to enumerate
+     shortcuts/Warehouses) — requires the SP to be at least a workspace **Viewer** (any workspace
+     role qualifies; you must be a member of the workspace at all to list its items).
+  2. A direct AAD-token JDBC connection to each Warehouse's SQL analytics endpoint to query
+     `queryinsights.exec_requests_history` (Warehouse copy-event engine only) — this does **not**
+     require a workspace role upgrade to Contributor. Per
+     [Microsoft's Warehouse sharing docs](https://learn.microsoft.com/en-us/fabric/data-warehouse/share-warehouse-manage-permissions),
+     grant the SP the item-level **`Monitor`** permission on that specific Warehouse (Warehouse item →
+     **Share** → check **Monitor**) — "Users with Monitor permission can query Dynamic Management
+     Views... and Insights views," which is exactly what `queryinsights.*` is. This is scoped to that
+     one Warehouse only (least privilege) and does **not** grant access to the warehouse's actual
+     business data (that would additionally require **"Read all data using SQL"/`ReadData`**, which
+     this solution does not need).
 - `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
