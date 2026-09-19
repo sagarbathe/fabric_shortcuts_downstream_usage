@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "823c3135066c0d341444",
   "position": {
     "x": 20,
@@ -145,7 +145,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -168,5 +167,135 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "57445268b7c37e0be48e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "duplicate_group_id"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8ebf1adc42b91b9cb948",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "severity"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "242abfc87bcee617433d",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "hosting_workspace_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "be40604390d0624471d4",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "hosting_item_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "871c5c5dca76152ccdbd",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "shortcut_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "bf2a1fd516a4c552dc58",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "source_item_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "b101450015c06c3678ac",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "source_path"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "bc933eea2068666b9490",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "Group Member Count"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "267aaddd901a4005bc53",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "explanation"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

@@ -3,7 +3,7 @@
   "version": "4.0",
   "datasetReference": {
     "byConnection": {
-      "connectionString": "semanticmodelid=10838a99-9e4e-4b30-8871-68d37f036d20"
+      "connectionString": "Data Source=powerbi://api.powerbi.com/v1.0/myorg/WS_SagarFabric01;initial catalog=SM_ShortcutMonitoring;integrated security=ClaimsToken;semanticmodelid=10838a99-9e4e-4b30-8871-68d37f036d20"
     }
   }
 }

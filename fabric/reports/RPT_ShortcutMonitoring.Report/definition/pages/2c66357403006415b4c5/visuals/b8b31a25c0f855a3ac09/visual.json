@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "b8b31a25c0f855a3ac09",
   "position": {
-    "x": 700,
-    "y": 90,
+    "x": 669.46031746031747,
+    "y": 0,
     "z": 1000,
-    "height": 320,
-    "width": 550,
+    "height": 220.44444444444446,
+    "width": 610.53968253968253,
     "tabOrder": 1000
   },
   "visual": {
@@ -69,7 +69,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -90,7 +89,66 @@
             }
           }
         }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "e0a5c5979786e2396a4e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "snapshot_ts"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2011c0e6bb7732785b94",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "Shortcuts Added"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "fc8a2d3a1aed964c2847",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "Shortcuts Removed"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

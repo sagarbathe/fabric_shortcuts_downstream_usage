@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "900a36bc03e603212608",
   "position": {
-    "x": 20,
-    "y": 220,
+    "x": 20.317460317460316,
+    "y": 220.44444444444446,
     "z": 1000,
-    "height": 450,
-    "width": 1230,
+    "height": 450.031746031746,
+    "width": 1259.6825396825398,
     "tabOrder": 1000
   },
   "visual": {
@@ -131,7 +131,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -152,7 +151,136 @@
             }
           }
         }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "2944ab01439dd85d87c7",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "snapshot_ts"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "4ec5d10885875d7e5dba",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "change_type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ff12c5599d60c96a3823",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "hosting_workspace_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2ee102b42850aa672809",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "hosting_item_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8aa9495ada880603db07",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "shortcut_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "cef9e0532394846c489a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "target_type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "015be8ccdc0684ee9916",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "source_item_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "92c4a493a5190d9bb104",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "source_path"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }
