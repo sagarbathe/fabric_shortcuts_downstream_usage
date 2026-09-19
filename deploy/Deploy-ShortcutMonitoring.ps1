@@ -36,7 +36,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)   # scripts/deploy -> scripts -> repo root
+$RepoRoot = Split-Path -Parent $PSScriptRoot   # deploy/ -> repo root
 $DeployDir = $PSScriptRoot
 $FabricDir = Join-Path $RepoRoot "fabric"
 

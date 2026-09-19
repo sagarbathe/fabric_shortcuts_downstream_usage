@@ -277,12 +277,12 @@ per engine so you have something for the detection notebooks to find:
 
 ## Deployment
 
-### Option A (recommended for a quick/fresh install): `scripts/deploy/Deploy-ShortcutMonitoring.ps1`
+### Option A (recommended for a quick/fresh install): `deploy/Deploy-ShortcutMonitoring.ps1`
 
 A single config-driven PowerShell script deploys every artifact into a target workspace, in
 dependency order, with a verification check after each step - no Git integration required.
 
-1. `cd scripts/deploy`, copy `deploy.config.example.json` to `deploy.config.json`, and fill in your
+1. `cd deploy`, copy `deploy.config.example.json` to `deploy.config.json`, and fill in your
    target `workspace.id` (or `workspace.createIfMissing`/`capacityId` to create a new one),
    `monitoredWorkspaces`, and `auth.tenantId`/`auth.clientId` (the monitoring SP — see **Prerequisites**
    above for the access it needs on each monitored workspace). Never commit this file (it's
@@ -306,7 +306,7 @@ dependency order, with a verification check after each step - no Git integration
    `ENV_OpenLineage` environment** below), and attaching that environment to
    `NB_OpenLineage_Validate.Notebook`/`NB_CopyEventDetection_SparkKafka.Notebook` in the portal's
    notebook **Environment** dropdown. The script prints a reminder for both after step 5.
-6. `fabric/**` is the templated source of truth for this script - `scripts/deploy/parameters.json`
+6. `fabric/**` is the templated source of truth for this script - `deploy/parameters.json`
    lists every literal value (workspace id, lakehouse id, SQL endpoint, notebook ids, semantic model
    id) it substitutes per item before upload. If you hand-edit an item's files directly in this repo
    with a *new* hardcoded id, add a matching token entry there too.
