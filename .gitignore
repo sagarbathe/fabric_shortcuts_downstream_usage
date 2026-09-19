@@ -6,3 +6,6 @@ fabric/notebooks/NB_OpenLineage_SparkLineageTest.Notebook/
 deploy/deploy.config.json
 deploy/.deploy-state.*.json
 
+
+# Word lock file
+~$*.docx
