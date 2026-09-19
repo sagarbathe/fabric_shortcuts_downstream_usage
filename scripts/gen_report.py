@@ -6,8 +6,10 @@ import json
 import os
 import secrets
 
-SEMANTIC_MODEL_ID = "77bd6b7a-bfde-49cb-85dd-7d9357db30fd"
+SEMANTIC_MODEL_ID = "10838a99-9e4e-4b30-8871-68d37f036d20"
 OUT_DIR = os.path.join(os.path.dirname(__file__), "_report_out")
+THEME_NAME = "CY24SU10"
+THEME_SRC = os.path.join(os.path.dirname(__file__), "theme_CY24SU10.json")
 
 
 def hid():
@@ -202,14 +204,23 @@ PAGES = [
 ]
 
 REPORT_JSON = {
-    "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.1.0/schema.json",
+    "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.3.0/schema.json",
     "themeCollection": {
         "baseTheme": {
-            "name": "CY23SU08",
-            "reportVersionAtImport": {"visual": "2.5.0", "report": "3.1.0", "page": "2.3.0"},
+            "name": THEME_NAME,
+            "reportVersionAtImport": {"visual": "1.8.95", "report": "2.0.95", "page": "1.3.95"},
             "type": "SharedResources",
         }
     },
+    "resourcePackages": [
+        {
+            "name": "SharedResources",
+            "type": "SharedResources",
+            "items": [
+                {"name": THEME_NAME, "path": f"BaseThemes/{THEME_NAME}.json", "type": "BaseTheme"},
+            ],
+        }
+    ],
     "settings": {
         "useStylableVisualContainerHeader": True,
         "defaultFilterActionIsDataFilter": True,
@@ -222,7 +233,7 @@ REPORT_JSON = {
 
 VERSION_JSON = {
     "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/versionMetadata/1.0.0/schema.json",
-    "version": "5.0.0",
+    "version": "2.0.0",
 }
 
 DEFINITION_PBIR = {
@@ -269,6 +280,11 @@ def main():
 
     write_json(os.path.join(OUT_DIR, "definition.pbir"), DEFINITION_PBIR)
     write_json(os.path.join(OUT_DIR, ".platform"), PLATFORM_JSON)
+
+    theme_dest = os.path.join(OUT_DIR, "StaticResources", "SharedResources", "BaseThemes", f"{THEME_NAME}.json")
+    os.makedirs(os.path.dirname(theme_dest), exist_ok=True)
+    shutil.copyfile(THEME_SRC, theme_dest)
+
     print(f"Report definition written to {OUT_DIR}")
 
 
