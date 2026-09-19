@@ -1,0 +1,50 @@
+{
+  "_comment": "Copy this file to deploy.config.json (git-ignored) and fill in your target environment. Never commit real workspace/service-principal values or secrets in deploy.config.json.",
+
+  "workspace": {
+    "id": "",
+    "displayName": "",
+    "createIfMissing": false,
+    "capacityId": ""
+  },
+
+  "folders": { "containerFolderName": "" },
+  "lakehouse": { "displayName": "LH_ShortcutMonitoring" },
+  "environment": { "displayName": "ENV_OpenLineage" },
+  "eventstream": { "displayName": "ES_OpenLineageEvents" },
+
+  "monitoredWorkspaces": [
+    { "workspaceName": "WS_Example01", "workspaceId": "00000000-0000-0000-0000-000000000001" }
+  ],
+
+  "detection": {
+    "duplicateShortcutCheck": true,
+    "readAndSavedAsIsCheck": true,
+    "columnRetentionThresholdPercent": 80,
+    "thresholdEffectiveFrom": "",
+    "excludeWarehouseNamePatterns": ["StagingWarehouseForDataflows", "DataflowsStagingWarehouse"],
+    "lineageFileCleanupMode": "none",
+    "lineageFileCleanupGraceMinutes": 60
+  },
+
+  "orchestration": { "enabledEngines": ["warehouse", "sparkKafka"] },
+
+  "auth": {
+    "tenantId": "",
+    "clientId": "",
+    "_comment": "clientSecret is NEVER stored here - the deploy script prompts for it securely (Read-Host -AsSecureString) and writes it straight into the uploaded config.json."
+  },
+
+  "pipeline": {
+    "scheduleEnabled": false,
+    "cronExpression": "0 */6 * * *",
+    "timeZone": "UTC"
+  },
+
+  "deployOptionalTestNotebook": false,
+  "runInitialPipelineJob": true,
+
+  "deploySemanticModel": true,
+  "deployReport": true,
+  "deployDataAgent": true
+}

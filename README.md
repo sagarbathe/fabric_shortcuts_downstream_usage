@@ -224,8 +224,17 @@ To rebuild it from scratch (or verify an existing one):
 
 ## Prerequisites
 
-- A Microsoft Fabric workspace (capacity must be running) with a monitoring service
-  principal granted read access to all monitored workspaces.
+- A Microsoft Fabric workspace (capacity must be running) with a monitoring service principal (SP)
+  granted read access to all monitored workspaces. The SP must be added as **at least a Viewer** on
+  every workspace listed in `config.monitoredWorkspaces` — this can only be done by that workspace's
+  own admin/owner, not by this solution's deployment script, since it requires access the deployer may
+  not have over other teams' workspaces. Concretely, the SP's token is used two ways per monitored
+  workspace: (1) `GET /v1/workspaces/{id}/items` and `.../warehouses/{id}` (Fabric REST API — Viewer
+  role is sufficient) to enumerate shortcuts/Warehouses, and (2) a direct AAD-token JDBC connection to
+  each Warehouse's SQL analytics endpoint to query `queryinsights.exec_requests_history` (Warehouse
+  copy-event engine only) — Viewer's default SQL mapping is normally enough, but if a workspace has
+  locked-down Warehouse-level SQL security beyond the default role mapping, its owner may also need to
+  run `CREATE USER [<sp-name>] FROM EXTERNAL PROVIDER` + `GRANT SELECT` explicitly in that Warehouse.
 - `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
@@ -268,7 +277,41 @@ per engine so you have something for the detection notebooks to find:
 
 ## Deployment
 
-### Option A: Fabric Git integration (recommended, used to build this solution)
+### Option A (recommended for a quick/fresh install): `scripts/deploy/Deploy-ShortcutMonitoring.ps1`
+
+A single config-driven PowerShell script deploys every artifact into a target workspace, in
+dependency order, with a verification check after each step - no Git integration required.
+
+1. `cd scripts/deploy`, copy `deploy.config.example.json` to `deploy.config.json`, and fill in your
+   target `workspace.id` (or `workspace.createIfMissing`/`capacityId` to create a new one),
+   `monitoredWorkspaces`, and `auth.tenantId`/`auth.clientId` (the monitoring SP — see **Prerequisites**
+   above for the access it needs on each monitored workspace). Never commit this file (it's
+   git-ignored) or put a secret in it — the script prompts for the SP's `clientSecret` interactively.
+2. Run `az login` if you haven't already, then:
+   ```powershell
+   .\Deploy-ShortcutMonitoring.ps1 -ConfigPath .\deploy.config.json
+   ```
+3. The script runs 12 steps (workspace → folders → Lakehouse → config.json upload → Environment →
+   Eventstream → Notebooks → Pipeline → an initial pipeline run to seed the Fact/Dim tables →
+   Semantic Model → Report → Data Agent), printing an `[OK]` verification line after each one, and
+   persists resolved item ids to `.deploy-state.<workspaceId>.json` so re-runs update items in place
+   instead of recreating them.
+4. If a step fails, the script prints the exact `-SkipSteps` value to resume from where it stopped,
+   e.g.:
+   ```powershell
+   .\Deploy-ShortcutMonitoring.ps1 -ConfigPath .\deploy.config.json -SkipSteps 1,2,3,4,5,6,7,8,9
+   ```
+5. Two things the script deliberately does **not** automate (Fabric has no definition-API surface for
+   either): populating the `ENV_OpenLineage` environment's Kafka secret (see **Building the
+   `ENV_OpenLineage` environment** below), and attaching that environment to
+   `NB_OpenLineage_Validate.Notebook`/`NB_CopyEventDetection_SparkKafka.Notebook` in the portal's
+   notebook **Environment** dropdown. The script prints a reminder for both after step 5.
+6. `fabric/**` is the templated source of truth for this script - `scripts/deploy/parameters.json`
+   lists every literal value (workspace id, lakehouse id, SQL endpoint, notebook ids, semantic model
+   id) it substitutes per item before upload. If you hand-edit an item's files directly in this repo
+   with a *new* hardcoded id, add a matching token entry there too.
+
+### Option B: Fabric Git integration (used to build this solution)
 
 Connect the target Fabric workspace directly to this repo (or a branch/fork of it) so items sync
 in both directions through the Fabric portal — this is how the items in this repo were originally
@@ -284,7 +327,7 @@ authored and kept in sync.
    `PL_ShortcutMonitoringOrchestrator`'s schedule (Fabric portal → pipeline → Settings → Schedule)
    once validated.
 
-### Option B: Scripted deployment via the Fabric REST API / `fabric-cicd`
+### Option C: CI/CD via the Fabric REST API / `fabric-cicd`
 
 For CI/CD (GitHub Actions/Azure DevOps) or environments where a live Git-connected workspace isn't
 practical, deploy the same item folders programmatically instead of through the portal's Git pane:

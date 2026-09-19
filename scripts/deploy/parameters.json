@@ -1,0 +1,19 @@
+{
+  "_comment": "Literal values currently baked into the fabric/** reference item definitions (from the original WS_SagarFabric01 workspace). Deploy-ShortcutMonitoring.ps1 replaces each 'literal' with a value it resolves at deploy time (new workspace id, newly-created lakehouse id, etc.) before uploading each item's definition. Do not edit 'literal' values unless the reference fabric/** files themselves change.",
+  "tokens": [
+    { "name": "WORKSPACE_ID", "literal": "c5c50c6e-30d1-4d2e-8766-d82917e13592", "resolvedFrom": "target workspace id (from config)" },
+    { "name": "WORKSPACE_NAME", "literal": "WS_SagarFabric01", "resolvedFrom": "target workspace display name (from config)" },
+    { "name": "LAKEHOUSE_ID", "literal": "c61c659f-ecba-4de8-a5b7-25885eb3021f", "resolvedFrom": "step 03-Lakehouse (LH_ShortcutMonitoring item id)" },
+    { "name": "SQL_ENDPOINT", "literal": "cnfzy3l2lhkuxgxslgdsleid7u-nygmlrorgaxe3b3g3aurpyjvsi.datawarehouse.fabric.microsoft.com", "resolvedFrom": "step 03-Lakehouse (SQL analytics endpoint connection string)" },
+    { "name": "ENVIRONMENT_ID", "literal": "6b3991b0-08cf-484b-bef3-beff3a6b8861", "resolvedFrom": "step 05-Environment (ENV_OpenLineage item id)" },
+    { "name": "NOTEBOOK_ID_DUPLICATE_DETECTION", "literal": "d0e9fca6-a647-456a-a057-3351e27a0af6", "resolvedFrom": "step 07-Notebooks (NB_ShortcutInventory_DuplicateDetection item id)" },
+    { "name": "NOTEBOOK_ID_WAREHOUSE", "literal": "436cf49e-3fb7-4d97-84cc-2ad71578b137", "resolvedFrom": "step 07-Notebooks (NB_CopyEventDetection_Warehouse item id)" },
+    { "name": "NOTEBOOK_ID_SPARKKAFKA", "literal": "61617dd0-188d-417e-bb66-386463fdbd80", "resolvedFrom": "step 07-Notebooks (NB_CopyEventDetection_SparkKafka item id)" },
+    { "name": "SEMANTIC_MODEL_ID", "literal": "10838a99-9e4e-4b30-8871-68d37f036d20", "resolvedFrom": "step 10-SemanticModel (SM_ShortcutMonitoring item id)" }
+  ],
+  "notes": [
+    "NB_OpenLineage_SparkLineageTest.Notebook is intentionally excluded from automated deployment (config.deployOptionalTestNotebook, default false) - it is a manual ad-hoc diagnostic notebook that also references a second, non-solution scratch lakehouse id not covered by any token.",
+    "The Eventstream's Lakehouse destination reuses the LAKEHOUSE_ID/WORKSPACE_ID tokens (no separate token needed).",
+    "The Data Agent's datasource.json and the Report's definition.pbir both reuse WORKSPACE_ID/WORKSPACE_NAME/SEMANTIC_MODEL_ID tokens (no separate tokens needed)."
+  ]
+}
