@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "2f392ec0cf8b97435609",
   "position": {
-    "x": 700,
-    "y": 90,
+    "x": 1015.8730158730159,
+    "y": 0,
     "z": 1000,
-    "height": 110,
-    "width": 550,
+    "height": 109.71428571428571,
+    "width": 264.12698412698415,
     "tabOrder": 1000
   },
   "visual": {
@@ -33,7 +33,13 @@
         }
       }
     },
-    "objects": {},
+    "objects": {
+      "general": [
+        {
+          "properties": {}
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -56,5 +62,23 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "aa088b9edb075a42a099",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactDuplicateShortcutGroup"
+              }
+            },
+            "Property": "severity"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

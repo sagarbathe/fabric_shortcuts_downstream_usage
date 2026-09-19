@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "dd17738fcc45173a0748",
   "position": {
-    "x": 20,
-    "y": 90,
+    "x": 0,
+    "y": 0,
     "z": 1000,
-    "height": 550,
-    "width": 220,
+    "height": 720.25396825396831,
+    "width": 135.11111111111111,
     "tabOrder": 1000
   },
   "visual": {
@@ -33,7 +33,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -54,7 +53,38 @@
             }
           }
         }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "3f4c0e080b1b5e15ccd6",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "engine"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

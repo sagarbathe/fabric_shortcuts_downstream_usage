@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "5c17f46e0d9ac3eadc49",
   "position": {
-    "x": 260,
-    "y": 90,
+    "x": 135.11111111111111,
+    "y": 0,
     "z": 1000,
-    "height": 240,
-    "width": 700,
+    "height": 238.73015873015873,
+    "width": 699.936507936508,
     "tabOrder": 1000
   },
   "visual": {
@@ -65,7 +65,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -86,7 +85,66 @@
             }
           }
         }
+      ],
+      "border": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "9a695bc1a06add544a1a",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "detected_ts"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "6831457fa0115300b107",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "Total Copy Events"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "cc66b7b066477d400db3",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "Flagged Copy Events"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "74feabce479892092e1c",
   "position": {
-    "x": 20,
-    "y": 240,
+    "x": 20.317460317460316,
+    "y": 124.95238095238095,
     "z": 1000,
-    "height": 320,
-    "width": 550,
+    "height": 343.36507936507934,
+    "width": 549.58730158730157,
     "tabOrder": 1000
   },
   "visual": {
@@ -65,7 +65,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -88,5 +87,51 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "e6bffae40727d4760e07",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "engine"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "1128408a8310a40d0069",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "Total Copy Events"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "30603e836414c038c650",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactCopyEvent"
+              }
+            },
+            "Property": "Flagged Copy Events"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }

@@ -1,12 +1,12 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
   "name": "5b37509e4d6252dda1db",
   "position": {
-    "x": 950,
-    "y": 240,
+    "x": 640,
+    "y": 158.47619047619048,
     "z": 1000,
-    "height": 320,
-    "width": 300,
+    "height": 309.84126984126982,
+    "width": 572.952380952381,
     "tabOrder": 1000
   },
   "visual": {
@@ -65,7 +65,6 @@
         }
       }
     },
-    "objects": {},
     "visualContainerObjects": {
       "title": [
         {
@@ -88,5 +87,51 @@
         }
       ]
     }
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "e9f6fe10c8003174a8ad",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "change_type"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "b38b0e6fc0c5158e17ca",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "Shortcuts Added"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a997220e5d1150dd820a",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "FactShortcutInventoryDiff"
+              }
+            },
+            "Property": "Shortcuts Removed"
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
   }
 }
