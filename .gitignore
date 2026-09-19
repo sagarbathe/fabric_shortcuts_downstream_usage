@@ -1,2 +1,8 @@
 # Investigation spike, kept locally + in Fabric only, not published to GitHub
 fabric/notebooks/NB_OpenLineage_SparkLineageTest.Notebook/
+
+# Scripted-deployment local artifacts: real workspace ids/config + resolved-id state per workspace.
+# Never contains secrets (clientSecret is prompted interactively, never written to disk here).
+scripts/deploy/deploy.config.json
+scripts/deploy/.deploy-state.*.json
+
