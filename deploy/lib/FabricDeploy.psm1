@@ -362,7 +362,18 @@ function Confirm-FabricEventstreamRunning {
        whole-Eventstream resume endpoint and re-checks, so a stale-paused stream is self-healed on
        every deploy run instead of silently dropping all events (which manifests downstream as a
        confusing "table ol_lineage_events_v3 not found" in the destination preview / detection
-       notebook, since a paused destination never gets the chance to auto-create its sink table). #>
+       notebook, since a paused destination never gets the chance to auto-create its sink table).
+
+       If the destination is STILL not Running after every automated resume attempt, that's not a
+       simple pause - it's almost always the Eventhouse destination's one-time "dangling
+       connectionName" issue (see NB_CopyEventDetection_SparkKafka.Notebook's header for the full
+       root cause): a REST-created Eventhouse destination has no real Fabric Connection object
+       backing it until an operator completes the portal's interactive "Configure"/Get data wizard
+       (OAuth handshake) - there is no public REST API to do this. Rather than let the deploy
+       continue on to Step 9's pipeline run (which fails with a confusing 404 from the Kusto query
+       endpoint), this pauses and walks the operator through the one-time manual fix, then re-checks
+       before continuing. This only happens the first time the destination is created - subsequent
+       redeploys against the same Eventstream item keep the Connection object and won't re-prompt. #>
     param(
         [Parameter(Mandatory)][string]$WorkspaceId,
         [Parameter(Mandatory)][hashtable]$Headers,
@@ -388,7 +399,34 @@ function Confirm-FabricEventstreamRunning {
         }
         Start-Sleep -Seconds $DelaySeconds
     }
-    Write-Warning "  Eventstream still has non-Running node(s) after $MaxAttempts resume attempt(s) - check the portal manually (Eventstream item > Resume, and verify the underlying Fabric capacity isn't paused)."
+
+    $portalUrl = "https://app.fabric.microsoft.com/groups/$WorkspaceId/eventstreams/$EventstreamId"
+    while ($true) {
+        Write-Warning "  Eventstream still has non-Running node(s) after $MaxAttempts automated resume attempt(s)."
+        Write-Host ""
+        Write-Host "  MANUAL STEP LIKELY REQUIRED (one-time only, first time this destination is created):"
+        Write-Host "    1. Open: $portalUrl"
+        Write-Host "    2. Click the 'RawCapture' destination node."
+        Write-Host "    3. Confirm 'Eventhouse' and 'KQL Database' both resolve to a real item (not 'Item not found')."
+        Write-Host "    4. If not, complete the destination wizard: Eventhouse -> KQL Database -> Get data -> select/inspect table 'ol_raw_events' -> Finish."
+        Write-Host "    5. Click Publish if the canvas still shows 'Edit mode'."
+        Write-Host ""
+        $response = Read-Host "  Press Enter once done to re-check (or type 'skip' to continue without verifying)"
+        if ($response -eq "skip") {
+            Write-Warning "  Continuing without verifying the Eventstream is Running - Step 9's pipeline run may fail if the destination isn't actually configured."
+            return
+        }
+        $topology = Invoke-WebRequest -Uri "$script:FabricBaseUri/workspaces/$WorkspaceId/eventstreams/$EventstreamId/topology" -Headers $Headers -Method Get -UseBasicParsing
+        $topologyContent = $topology.Content | ConvertFrom-Json
+        $nodes = @($topologyContent.sources) + @($topologyContent.destinations)
+        $notRunning = $nodes | Where-Object { $_.status -and $_.status -notin @("Running", "Active") }
+        if (-not $notRunning) {
+            Write-Host "  [OK] Eventstream is Running ($($nodes.Count) node(s) checked)."
+            return
+        }
+        $summary = ($notRunning | ForEach-Object { "$($_.name)=$($_.status)" }) -join ", "
+        Write-Host "  Still not Running: $summary"
+    }
 }
 
 function Publish-FabricEnvironment {
