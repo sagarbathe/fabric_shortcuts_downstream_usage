@@ -394,7 +394,7 @@ try:
         print("No new raw events found in the KQL Database this run.")
 except Exception as e:
     log_error_to_lakehouse("kql_raw_capture_query", e)
-    rai
+    raise
 
 # METADATA ********************
 
