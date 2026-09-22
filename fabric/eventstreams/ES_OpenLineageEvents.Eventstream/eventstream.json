@@ -13,7 +13,7 @@
       "properties": {
         "dataIngestionMode": "DirectIngestion",
         "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592",
-        "itemId": "0de3152d-ec0c-4750-a933-620c354a72d7",
+        "itemId": "3b6f2f5a-9d3f-4b30-9dcb-d0e0f6ba7d55",
         "tableName": "ol_raw_events",
         "connectionName": "ES_OpenLineageEvents_bcxub4",
         "mappingRuleName": "ol_raw_events_mapping"

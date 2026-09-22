@@ -52,6 +52,11 @@
       "resolvedFrom": "step 05-Eventstream (EH_ShortcutMonitoring Eventhouse item id, created/verified idempotently before the Eventstream is published)"
     },
     {
+      "name": "KQL_DATABASE_ID",
+      "literal": "3b6f2f5a-9d3f-4b30-9dcb-d0e0f6ba7d55",
+      "resolvedFrom": "step 05-Eventstream (EH_ShortcutMonitoring's auto-created child KQL Database item id - a DIFFERENT item than the Eventhouse itself; the Eventstream's Eventhouse-type destination and any /kqldatabases/{id} REST call must reference this id, not EVENTHOUSE_ID, or callers get a 404)"
+    },
+    {
       "name": "KAFKA_TOPIC_NAME",
       "literal": "esehbng88vpo1ej4n3s5du_eh",
       "resolvedFrom": "step 06-Environment: live eventHubName from the newly-created Eventstream's CustomEndpoint source connection"

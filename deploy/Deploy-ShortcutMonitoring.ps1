@@ -199,10 +199,12 @@ function Step05-Eventstream {
     # table) before the Eventstream is published, since the Eventstream's DirectIngestion
     # destination references it by item id, table name, and mapping rule name.
     $ehName = $Config.eventhouse.displayName
-    $ehId = Confirm-FabricEventhouseAndRawTable -WorkspaceId $wsId -Headers $Headers -EventhouseName $ehName -KqlTableName "ol_raw_events" -KqlMappingName "ol_raw_events_map"
+    $ehResult = Confirm-FabricEventhouseAndRawTable -WorkspaceId $wsId -Headers $Headers -EventhouseName $ehName -KqlTableName "ol_raw_events" -KqlMappingName "ol_raw_events_map"
+    $ehId = $ehResult.EventhouseId
     $State["EVENTHOUSE_ID"] = $ehId
+    $State["KQL_DATABASE_ID"] = $ehResult.KqlDatabaseId
     Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $ehId -FolderId $State["FOLDER_EVENTHOUSES"]
-    Write-Host "  [OK] eventhouse '$ehName' = $ehId"
+    Write-Host "  [OK] eventhouse '$ehName' = $ehId (KQL database = $($ehResult.KqlDatabaseId))"
 
     $templateDir = Join-Path $FabricDir "eventstreams\$name.Eventstream"
     $tokenMap = Get-TokenMap -State $State

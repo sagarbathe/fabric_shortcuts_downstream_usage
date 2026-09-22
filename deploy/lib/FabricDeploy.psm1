@@ -334,7 +334,7 @@ function Confirm-FabricEventhouseAndRawTable {
     Invoke-FabricRequest -Method Post -Uri "$script:FabricBaseUri/workspaces/$WorkspaceId/items/$($kqlDb.id)/updateDefinition" -Headers $Headers -Body $body | Out-Null
     Write-Host "  [OK] raw-capture table ready"
 
-    return $ehId
+    return @{ EventhouseId = $ehId; KqlDatabaseId = $kqlDb.id }
 }
 
 function Get-EventstreamCustomEndpointConnection {
