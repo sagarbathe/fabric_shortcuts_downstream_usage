@@ -342,7 +342,7 @@ try:
         f"{KQL_RAW_TABLE} "
         "| extend ingest_ts = ingestion_time() "
         f"{where_clause}"
-        "| project raw_json = tostring(pack('eventType', eventType, 'eventTime', eventTime, 'run', run, 'job', job, 'inputs', inputs, 'outputs', outputs, 'producer', producer)), ingest_ts "
+        "| project raw_json = tostring(RawRecord), ingest_ts "
         "| order by ingest_ts asc"
     )
 
