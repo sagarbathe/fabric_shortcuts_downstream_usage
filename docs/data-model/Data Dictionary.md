@@ -91,8 +91,8 @@ append-only.
 | `snapshot_ts` | `TIMESTAMP` | UTC timestamp of the scan run in which this change was detected. |
 
 **Used by:** `vw_FactCopyEvent_SourceStatus` to enrich `FactCopyEvent` rows whose source shortcut has
-since been deleted, and as a fallback lookup (alongside current `DimShortcut`) when reconciling
-historical `FactCopyEvent` rows.
+since been deleted, and as a fallback lookup (alongside current `DimShortcut`) when resolving
+`matched_shortcut_database` for shortcuts that have since been removed.
 
 ---
 
@@ -156,7 +156,7 @@ engine.** This is the core fact table the whole solution exists to populate.
 | `engine` | `STRING` | Fabric engine that executed the copy: `Warehouse` or `SparkKafka` (Dataflow Gen2 is a separate, not-yet-implemented future engine). |
 | `matched_shortcut_name` | `STRING` | Name of the OneLake shortcut the statement/notebook read from (matched against `DimShortcut`). |
 | `matched_shortcut_database` | `STRING` | Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from `hosting_item_name` for cross-item copies). |
-| `shortcut_sk` | `BIGINT` | Deterministic surrogate key of the matched shortcut, looked up from `DimShortcut.shortcut_sk` at detection time and stored as a real, materialized column (not derived at query time) — this is what lets the semantic model relate `FactCopyEvent` to `DimShortcut` under Direct Lake, which cannot use a calculated column as a relationship key. NULL if the matched shortcut couldn't be resolved to a `shortcut_sk` at detection time. Existing tables are migrated/backfilled automatically (see the migration-guard cell in both copy-event notebooks). |
+| `shortcut_sk` | `BIGINT` | Deterministic surrogate key of the matched shortcut, looked up from `DimShortcut.shortcut_sk` at detection time and stored as a real, materialized column (not derived at query time) — this is what lets the semantic model relate `FactCopyEvent` to `DimShortcut` under Direct Lake, which cannot use a calculated column as a relationship key. NULL if the matched shortcut couldn't be resolved to a `shortcut_sk` at detection time. |
 | `dest_table` | `STRING` | Destination table name the SELECT/write was saved into. |
 | `source_column_count` | `INT` | Total column count of the shortcut source table. |
 | `dest_column_count` | `INT` | Column count actually written to the destination table. |
@@ -167,7 +167,7 @@ engine.** This is the core fact table the whole solution exists to populate.
 | `threshold_pct_at_detection` | `DOUBLE` | Configurable retention threshold (`config.detection.columnRetentionThresholdPercent`) in effect when this row was computed. |
 | `copy_event_starttime` | `STRING` | Start time of the source query/write (kept as STRING, not TIMESTAMP, to avoid a Delta schema-merge conflict encountered during implementation). |
 | `copy_event_detected_time` | `STRING` | UTC timestamp this notebook run detected/computed this row. |
-| `username` | `STRING` | Identity that executed the copy. Warehouse: `login_name` from `queryinsights.exec_requests_history` (no extra correlation needed). SparkKafka: resolved by joining the exact `JobInstanceId` embedded in the OpenLineage `job.name` against the monitored workspace's Monitoring KQL database `ItemJobEventLogs.ExecutingPrincipalId`, then resolving that AAD object id to a friendly UPN/display name via Microsoft Graph `directoryObjects/{id}` (falls back to the raw AAD object id if Graph resolution fails or lacks permission). NULL for rows written before this column existed (no historical backfill) or if the SparkKafka correlation itself could not find a match (e.g. Monitoring KQL DB unreachable, or the job.name pattern didn't yield a matching `JobInstanceId`). |
+| `username` | `STRING` | Identity that executed the copy. Warehouse: `login_name` from `queryinsights.exec_requests_history` (no extra correlation needed). SparkKafka: resolved by joining the exact `JobInstanceId` embedded in the OpenLineage `job.name` against the monitored workspace's Monitoring KQL database `ItemJobEventLogs.ExecutingPrincipalId`, then resolving that AAD object id to a friendly UPN/display name via Microsoft Graph `directoryObjects/{id}` (falls back to the raw AAD object id if Graph resolution fails or lacks permission). NULL if the SparkKafka correlation itself could not find a match (e.g. Monitoring KQL DB unreachable, or the job.name pattern didn't yield a matching `JobInstanceId`). |
 
 ---
 

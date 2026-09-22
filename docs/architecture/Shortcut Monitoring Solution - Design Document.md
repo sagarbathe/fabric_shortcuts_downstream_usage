@@ -601,7 +601,7 @@ All tables live in a single Lakehouse, **`LH_ShortcutMonitoring`**, in workspace
 | Table | Grain | Written by | Purpose / how it's used |
 |---|---|---|---|
 | **`DimShortcut`** | one row per currently-existing shortcut | `NB_ShortcutInventory_DuplicateDetection` (full-overwrite each run, idempotent) | The ground-truth shortcut inventory across all monitored workspaces: `shortcut_sk` (deterministic BIGINT surrogate key, `xxhash64` of the natural key), `shortcut_name`, `hosting_workspace_id/name`, `hosting_item_id/name/type`, `shortcut_path`, `source_workspace_id/name`, `source_item_id/name`, `source_path`, `is_internal_onelake`, `snapshot_ts`. **Used by both copy-event detection notebooks** as the cross-reference lookup: the Warehouse notebook matches a parsed SQL statement's source table name against `DimShortcut` (keyed by `hosting_workspace_id` + `hosting_item_name`, spanning both Lakehouse- and Warehouse-hosted shortcuts); the Spark notebook matches an OpenLineage input dataset's real OneLake path against `DimShortcut` (keyed by `hosting_workspace_name` + `hosting_item_name` + `shortcut_name`, since OpenLineage reports the physical path, not the shortcut's display name, but the path's trailing segment is the shortcut name). |
-| **`FactShortcutInventoryDiff`** | one row per inventory diff run × shortcut that changed | Same notebook, append-only | Control-plane change history: `change_type` ∈ {new, removed, target_changed}. Answers "when was this shortcut created/deleted." **Used** by `vw_FactCopyEvent_SourceStatus` (below) to enrich `FactCopyEvent` rows whose source shortcut has since been deleted, and as a fallback lookup (alongside current `DimShortcut`) when backfilling `matched_shortcut_database` on historical `FactCopyEvent` rows. |
+| **`FactShortcutInventoryDiff`** | one row per inventory diff run × shortcut that changed | Same notebook, append-only | Control-plane change history: `change_type` ∈ {new, removed, target_changed}. Answers "when was this shortcut created/deleted." **Used** by `vw_FactCopyEvent_SourceStatus` (below) to enrich `FactCopyEvent` rows whose source shortcut has since been deleted, and as a fallback lookup (alongside current `DimShortcut`) when resolving a since-deleted shortcut's hosting item name. |
 | **`FactDuplicateShortcutGroup`** | one row per shortcut, tagged with its duplicate group | Same notebook | Two-pass duplicate detection per §1.1a (High = same hosting item, Medium = same workspace/different item). **Not consumed** by either copy-event detection notebook — purely a control-plane governance signal, surfaced on its own in the (not-yet-built) Power BI report. |
 | **`FactCopyEvent`** | one row per detected copy event (one job/statement × one matched shortcut × one destination) | **Both** `NB_CopyEventDetection_Warehouse` (`engine='Warehouse'`, append) and `NB_CopyEventDetection_Spark` (`engine='Spark'`, append) — **shared table, not duplicated per engine** | The core fact table this whole solution exists to populate: `event_id`, `hosting_workspace_id/name`, `hosting_item_id/name`, `engine`, `matched_shortcut_name`, `matched_shortcut_database` (the shortcut's hosting item name — may differ from `hosting_item_name` for cross-item copies), `dest_table`, `source_column_count`, `dest_column_count`, `retained_column_count`, `retention_pct`, `is_select_star`, `is_shortcut_read_and_saved_as_is`, `threshold_pct_at_detection`, `copy_event_starttime`, `copy_event_detected_time`. Both engines write the identical schema so downstream reporting/Data Agent queries never need to special-case engine type except to filter/group by it. |
 | **`CopyEventWatermark`** | one row per Warehouse item | `NB_CopyEventDetection_Warehouse` only | Incremental watermark for the Warehouse engine: `item_id -> last_processed_start_time` (a Query Insights `start_time` value). Ensures each run only scans NEW query-history rows per warehouse (pushed down into the `WHERE start_time > ...` SQL clause, not filtered client-side) — never a full rescan. Advances only past rows that were actually written to `FactCopyEvent`, so a row that fails parsing/matching is retried next run rather than silently lost. |
@@ -825,7 +825,7 @@ hosting_item_name                STRING   -- Warehouse: the Warehouse item name
 engine                           STRING   -- 'Warehouse' | 'SparkKafka'
 matched_shortcut_name            STRING
 matched_shortcut_database        STRING   -- the shortcut's hosting item name (may differ from hosting_item_name for cross-item copies)
-shortcut_sk                      BIGINT   -- surrogate key join to DimShortcut (Direct Lake relationship key; migrated in later)
+shortcut_sk                      BIGINT   -- surrogate key join to DimShortcut (Direct Lake relationship key)
 dest_table                       STRING
 source_column_count              INT
 dest_column_count                INT
@@ -836,15 +836,14 @@ is_shortcut_read_and_saved_as_is BOOLEAN
 threshold_pct_at_detection       DOUBLE
 copy_event_starttime             STRING   -- kept as STRING (not TIMESTAMP) to avoid a Delta schema-merge conflict encountered during implementation
 copy_event_detected_time         STRING
-username                         STRING   -- added later; see §13.8. Warehouse: login_name from Query Insights.
-                                          -- SparkKafka: Graph-resolved principal via JobInstanceId correlation. NULL for
-                                          -- rows written before this column existed (no historical backfill).
+username                         STRING   -- see §13.8. Warehouse: login_name from Query Insights.
+                                          -- SparkKafka: Graph-resolved principal via JobInstanceId correlation.
 ```
 
-`shortcut_sk` and `username` were both added after the table's initial creation via idempotent
-`ALTER TABLE ... ADD COLUMNS` migration guards in both copy-event notebooks (checked via
-`spark.catalog.tableExists`/schema inspection before altering) — existing deployments upgrade in
-place on their next run, no manual DDL required.
+The full schema above — including `shortcut_sk`, `severity`, `username`, and
+`matched_shortcut_database` — is created directly by the initial `CREATE TABLE`/`saveAsTable` call
+in both copy-event notebooks; there is no separate migration/upgrade path, since this solution is
+always deployed clean into a fresh workspace with no pre-existing `FactCopyEvent` table.
 
 ### 13.7 Open items / next steps (as of this document's last update)
 
@@ -893,7 +892,7 @@ pipeline's stages), which is why the engine is now named `SparkKafka` rather tha
     the workspace/Warehouse permissions — Graph is not a supported `notebookutils.credentials.getToken()`
     audience, so this is a manual OAuth2 token request). Falls back to the raw AAD object id if Graph
     resolution fails; leaves `username` NULL only if the `JobInstanceId` correlation itself finds no
-    match. No historical backfill — rows written before this column existed remain NULL permanently.
+    match.
 - **Delta concurrency hardening** — `FactCopyEvent` is a single table written by both notebooks, and
   their `ALTER TABLE ... SET TBLPROPERTIES`/`ALTER COLUMN ... COMMENT` metadata statements were
   previously unconditional on every run, which under Delta's serializable isolation invalidates any
@@ -901,8 +900,7 @@ pipeline's stages), which is why the engine is now named `SparkKafka` rather tha
   ALTER conditional on the stored value actually differing from the desired one, cutting their
   frequency to near-zero after the first run, and (b) adding a generic `with_delta_conflict_retry()`
   helper (retries on `ConcurrentAppendException`/`MetadataChangedException`/etc. with backoff,
-  re-raises everything else) as a safety net around the main `FactCopyEvent` append and both
-  migration-guard ALTERs in each notebook.
+  re-raises everything else) as a safety net around the main `FactCopyEvent` append in each notebook.
 - **SQL-comment robustness** — column/table COMMENT text is defensively stripped of single quotes
   (`.replace("'", "")`) before being interpolated into an f-string ALTER statement, since Spark SQL
   does not reliably support `''`-style escaping the way ANSI SQL does; one apostrophe in a `username`

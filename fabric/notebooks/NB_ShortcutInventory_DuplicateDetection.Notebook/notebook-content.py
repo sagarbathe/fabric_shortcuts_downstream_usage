@@ -345,27 +345,10 @@ try:
             .withColumn("change_type", F.lit("removed"))
         )
 
-    # Explicit schema-migration guard: FactShortcutInventoryDiff is append-only and only gets a
-    # mergeSchema write when diff_parts is non-empty (an actual new/removed row this run). That means
-    # a run with zero inventory changes would silently leave a pre-existing table missing any newly
-    # added columns (unlike DimShortcut, which unconditionally overwrites its full schema every run).
-    # Ensure the physical table always has these columns before the semantic model (which references
-    # them unconditionally in model.bim) is ever pointed at it - otherwise Direct Lake refresh fails
-    # with "We cannot access the source column ... Either the source column does not exist...".
-    if spark.catalog.tableExists("FactShortcutInventoryDiff"):
-        existing_diff_cols = {f.name for f in spark.table("FactShortcutInventoryDiff").schema.fields}
-        for new_col in ("source_external_location", "source_external_subpath", "source_external_connection_id", "source_external_details_json"):
-            if new_col not in existing_diff_cols:
-                spark.sql(f"ALTER TABLE FactShortcutInventoryDiff ADD COLUMNS ({new_col} STRING)")
-                print(f"Migrated FactShortcutInventoryDiff: added missing column '{new_col}'.")
-
     diff_row_count = 0
     if diff_parts:
         diff_df = diff_parts[0]
         for part in diff_parts[1:]:
-            # allowMissingColumns handles the one-time schema migration where "removed" rows come from
-            # a pre-existing DimShortcut snapshot written before the source_external_* columns existed -
-            # missing columns are filled with nulls rather than raising an AnalysisException.
             diff_df = diff_df.unionByName(part, allowMissingColumns=True)
         diff_df = diff_df.select(
             "shortcut_sk", "shortcut_key", "change_type",

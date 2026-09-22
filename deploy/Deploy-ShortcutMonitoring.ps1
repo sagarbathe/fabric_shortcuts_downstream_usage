@@ -131,7 +131,7 @@ function Step02-Folders {
         $parentFolderId = Get-OrNew-FabricFolder -WorkspaceId $wsId -Headers $Headers -DisplayName $Config.folders.containerFolderName
         Write-Host "  [OK] container folder '$($Config.folders.containerFolderName)' = $parentFolderId"
     }
-    $folderNames = @("lakehouse", "notebooks", "pipelines", "environment", "eventstreams", "semanticmodels", "reports", "dataagents")
+    $folderNames = @("lakehouse", "notebooks", "pipelines", "environment", "eventstreams", "eventhouses", "semanticmodels", "reports", "dataagents")
     foreach ($name in $folderNames) {
         $id = Get-OrNew-FabricFolder -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ParentFolderId $parentFolderId
         $State["FOLDER_$($name.ToUpper())"] = $id
@@ -201,6 +201,7 @@ function Step05-Eventstream {
     $ehName = $Config.eventhouse.displayName
     $ehId = Confirm-FabricEventhouseAndRawTable -WorkspaceId $wsId -Headers $Headers -EventhouseName $ehName -KqlTableName "ol_raw_events" -KqlMappingName "ol_raw_events_map"
     $State["EVENTHOUSE_ID"] = $ehId
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $ehId -FolderId $State["FOLDER_EVENTHOUSES"]
     Write-Host "  [OK] eventhouse '$ehName' = $ehId"
 
     $templateDir = Join-Path $FabricDir "eventstreams\$name.Eventstream"

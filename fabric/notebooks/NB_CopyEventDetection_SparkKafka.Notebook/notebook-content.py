@@ -31,8 +31,8 @@
 # --- Prerequisite (out of scope for this notebook) ---
 # Every monitored Spark notebook must have the OpenLineage listener enabled via the attached
 # `ENV_OpenLineage` environment (Kafka transport -> `ES_OpenLineageEvents` Eventstream's CustomEndpoint
-# source). See `fabric_openlineage_kafka_design.md` and the `Spark-KafkaEventstreamMonitoring`
-# reference folder for how that pipeline was built. Unlike the file-transport notebook, there is no
+# source). See `docs/architecture/Shortcut Monitoring Solution - Design Document.md` for how that
+# pipeline is built. Unlike the file-transport notebook, there is no
 # per-notebook lineage file to discover - ALL monitored notebooks' events land on the SAME shared
 # Kafka-compatible topic, distinguished per-event by `run.facets.spark_properties.properties`
 # (workspace id, notebook item id and name are embedded there by Fabric's Spark runtime).
@@ -209,94 +209,6 @@ try:
     config = json.loads(config_text)
 except Exception as e:
     log_error_to_lakehouse("load_config", e)
-    raise
-
-# --- One-time schema migration guard: add shortcut_sk to FactCopyEvent if the table already existed
-# from before this column was introduced (needed as a real, materialized Delta column - not a
-# semantic-model calculated column - so Direct Lake relationships can join on it). Placed BEFORE the
-# enabledEngines exit check below so it always runs on every invocation of either copy-event notebook,
-# even when this specific engine is disabled this run. Safe/idempotent: no-op once migrated. Identical
-# logic to NB_CopyEventDetection_Warehouse's guard - only one of the two needs to actually run it on
-# any given pipeline execution, but it's harmless/idempotent to have it in both.
-try:
-    if spark.catalog.tableExists("FactCopyEvent"):
-        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
-        if "shortcut_sk" not in existing_fields:
-            spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (shortcut_sk BIGINT)")
-            print("Migrated FactCopyEvent: added shortcut_sk column.")
-        else:
-            print("FactCopyEvent already has shortcut_sk column - no migration needed.")
-
-        blank_count = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
-        if blank_count > 0 and spark.catalog.tableExists("DimShortcut"):
-            spark.sql("""
-                MERGE INTO FactCopyEvent f
-                USING DimShortcut d
-                ON f.hosting_workspace_id = d.hosting_workspace_id
-                   AND f.matched_shortcut_database = d.hosting_item_name
-                   AND f.matched_shortcut_name = d.shortcut_name
-                   AND f.shortcut_sk IS NULL
-                WHEN MATCHED THEN UPDATE SET f.shortcut_sk = d.shortcut_sk
-            """)
-            remaining = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE shortcut_sk IS NULL").collect()[0]["c"]
-            print(f"Backfilled shortcut_sk for {blank_count - remaining} historical row(s); {remaining} still unresolved (source shortcut no longer in DimShortcut).")
-        else:
-            print("No blank shortcut_sk rows to backfill (or DimShortcut not yet populated).")
-except Exception as e:
-    log_error_to_lakehouse("migrate_factcopyevent_shortcut_sk", e)
-    raise
-
-# --- One-time schema migration guard: add severity to FactCopyEvent if the table already existed
-# from before this column was introduced. severity = 'High' for Table-type shortcuts, 'Medium' for
-# File-type shortcuts (determined by DimShortcut.shortcut_path, independent of target_type) -
-# backfilled for historical rows via their already-resolved shortcut_sk. Identical logic to
-# NB_CopyEventDetection_Warehouse's guard (Warehouse-engine rows are always 'High' since a Warehouse
-# only has Tables, no Files concept). ---
-try:
-    if spark.catalog.tableExists("FactCopyEvent"):
-        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
-        if "severity" not in existing_fields:
-            spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (severity STRING)")
-            print("Migrated FactCopyEvent: added severity column.")
-        else:
-            print("FactCopyEvent already has severity column - no migration needed.")
-
-        blank_count = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE severity IS NULL").collect()[0]["c"]
-        if blank_count > 0 and spark.catalog.tableExists("DimShortcut"):
-            spark.sql("""
-                MERGE INTO FactCopyEvent f
-                USING DimShortcut d
-                ON f.shortcut_sk = d.shortcut_sk
-                   AND f.severity IS NULL
-                WHEN MATCHED THEN UPDATE SET f.severity =
-                    CASE WHEN lower(trim(both '/' from d.shortcut_path)) = 'tables'
-                              OR lower(trim(both '/' from d.shortcut_path)) LIKE 'tables/%'
-                         THEN 'High' ELSE 'Medium' END
-            """)
-            remaining = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE severity IS NULL").collect()[0]["c"]
-            print(f"Backfilled severity for {blank_count - remaining} historical row(s); {remaining} still unresolved (shortcut_sk unresolved or no longer in DimShortcut).")
-        else:
-            print("No blank severity rows to backfill (or DimShortcut not yet populated).")
-except Exception as e:
-    log_error_to_lakehouse("migrate_factcopyevent_severity", e)
-    raise
-
-# --- One-time schema migration guard: add username to FactCopyEvent if the table already existed
-# from before this column was introduced. Unlike shortcut_sk/severity, there is no backfill for
-# historical rows here - the source data (Query Insights history / Workspace Monitoring job logs)
-# has its own retention window and isn't guaranteed to still contain the original run, so old rows
-# are simply left with a NULL username going forward. Identical guard in
-# NB_CopyEventDetection_Warehouse - harmless/idempotent to have it in both. ---
-try:
-    if spark.catalog.tableExists("FactCopyEvent"):
-        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
-        if "username" not in existing_fields:
-            with_delta_conflict_retry(lambda: spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (username STRING)"))
-            print("Migrated FactCopyEvent: added username column.")
-        else:
-            print("FactCopyEvent already has username column - no migration needed.")
-except Exception as e:
-    log_error_to_lakehouse("migrate_factcopyevent_username", e)
     raise
 
 # config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every

@@ -883,7 +883,7 @@
             "summarizeBy": "none",
             "isHidden": false,
             "lineageTag": "5a32f8c8-bf2f-4e4d-8810-62be7fc5c39c",
-            "description": "Identity that executed the copy. Warehouse: login_name from Query Insights. SparkKafka: resolved via Fabric Workspace Monitoring's ItemJobEventLogs (ExecutingPrincipalId, joined on the exact JobInstanceId embedded in the OpenLineage job.name) and Microsoft Graph. Blank for rows written before this column existed (no historical backfill), or if the identity could not be resolved (falls back to the raw AAD object id)."
+            "description": "Identity that executed the copy. Warehouse: login_name from Query Insights. SparkKafka: resolved via Fabric Workspace Monitoring's ItemJobEventLogs (ExecutingPrincipalId, joined on the exact JobInstanceId embedded in the OpenLineage job.name) and Microsoft Graph. Blank if the identity could not be resolved (falls back to the raw AAD object id)."
           }
         ],
         "measures": [

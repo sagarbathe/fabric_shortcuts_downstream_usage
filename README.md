@@ -82,35 +82,10 @@ flowchart TD
     E -- failed/no permission --> G["username = raw AAD object id (fallback)"]
 ```
 
-**Note:** `username` is only populated for rows written *after* this column was added — there is no
-backfill for historical `FactCopyEvent` rows written before the feature existed (they remain blank).
-
-### Historical copy-event coverage (how far back each engine can "see")
-
-Both copy-event engines are **incremental/watermark-based**, not full-history backfills, but how far back their *first*
-run can reach differs a lot because of what each one reads from:
-
-- **Spark engine (`NB_CopyEventDetection_SparkKafka`) — no history at all.** This engine is purely event-driven: it
-  only sees a copy event if the OpenLineage Spark listener emitted it live, through `ES_OpenLineageEvents`, into
-  `ol_lineage_events_v3`, while the environment was attached and the eventstream was running. There is no API to
-  retroactively ask Spark "what did you read/write last month" - if a shortcut-reading Spark job ran before this
-  solution (and `ENV_OpenLineage`) was deployed and attached, that copy event is gone forever and will never appear
-  in `FactCopyEvent`. **Only copy events produced by Spark notebook runs *after* this solution is deployed and the
-  notebook is attached to `ENV_OpenLineage` are captured.**
-- **Warehouse engine (`NB_CopyEventDetection_Warehouse`) — bounded by Fabric's Query Insights retention.** This
-  engine mines `[warehouse].[queryinsights].[exec_requests_history]`, which is a Microsoft-managed system view, not
-  something this solution populates. Per Fabric documentation, **Query Insights retains historical query execution
-  data for 30 days** (see [Query Insights - Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/data-warehouse/query-insights)).
-  This means on its *first* run, the Warehouse engine can discover shortcut-reading CTAS/INSERT-SELECT statements
-  that ran up to ~30 days before deployment - but nothing older than that; anything beyond the 30-day window has
-  already rolled off `exec_requests_history` and cannot be recovered. After the first run, the watermark
-  (`CopyEventWatermark`) takes over and every 15-minute scheduled run only looks for statements newer than the
-  last processed `start_time`, so no gaps open up going forward as long as the pipeline keeps running on schedule.
-
-**Practical implication:** treat the day this solution is first deployed as the effective start of continuous
-copy-event monitoring. Warehouse copy events from up to ~30 days prior may show up once, but Spark copy events
-have zero retroactive visibility - if you need to know about Spark-based copies that happened before deployment,
-that information does not exist anywhere in Fabric and cannot be reconstructed.
+**Note:** SparkKafka username resolution depends on the monitored workspace's Monitoring KQL
+database and Microsoft Graph being reachable at detection time; if either lookup fails, `username`
+falls back to the raw AAD object id (or stays blank if the `JobInstanceId` itself can't be resolved)
+rather than blocking the copy event from being recorded.
 
 ## Repo layout
 
@@ -141,6 +116,13 @@ that information does not exist anywhere in Fabric and cannot be reconstructed.
         └── DA_ShortcutMonitoring.DataAgent/
 ```
 
+> **Eventhouse note:** the workspace also has an `eventhouses` folder holding
+> `EH_ShortcutMonitoring.Eventhouse` (raw-capture KQL database for `ol_raw_events`), created and
+> moved there entirely via Fabric REST calls (`Confirm-FabricEventhouseAndRawTable` +
+> `Move-FabricItemToFolder` in `deploy/Deploy-ShortcutMonitoring.ps1`) rather than from a git-tracked
+> item template — Eventhouses have no `Publish-FabricItem`/local-definition-folder equivalent in this
+> repo, unlike every other item type above, so there is no `fabric/eventhouses/` directory to sync.
+
 > **Fabric Git sync note:** each Fabric item folder (`<DisplayName>.<ItemType>`) must still sit
 > directly inside the folder that the Fabric workspace's Git connection points at — Fabric mirrors
 > folder structure 1:1 between the repo and the workspace. This repo's items were regrouped by type
@@ -166,12 +148,8 @@ Because the semantic model lives in the same workspace as the Lakehouse, Direct 
 access via the workspace's own identity/SSO automatically — there's **no OAuth2 credential
 binding to configure** (the "Data source credentials" option in the portal is disabled for this
 kind of connection, which is expected, not an error). The only prerequisite is that the notebooks
-(which write the `shortcut_sk` column) have already run at least once against
-`LH_ShortcutMonitoring` so the Fact tables have that column populated; a brand-new deployment with
-an empty Lakehouse — or an existing Lakehouse whose tables predate the `shortcut_sk` column — will
-fail to refresh/frame until the next notebook run backfills it (each notebook run includes an
-idempotent one-time migration guard that adds the column if it's missing and back-fills historical
-rows from `DimShortcut`).
+have run at least once against `LH_ShortcutMonitoring` so the Fact/Dim tables exist with data —
+Direct Lake framing fails on a Lakehouse with no tables yet.
 
 The generator scripts used to author these items (`scripts/gen_semantic_model.py`,
 `scripts/gen_report.py`, `scripts/gen_data_agent.py`) and the generic deployer
@@ -358,10 +336,11 @@ To rebuild it from scratch (or verify an existing one):
      does not deploy, depend on, or query Workspace Monitoring itself - manually checking the
      Eventstream canvas (steps 1-3 above) is sufficient.
 
-  Because the Spark engine has **zero retroactive visibility** (see **Historical copy-event coverage**
-  above), an undetected Eventstream outage is a silent data gap for that whole window - it will not
-  self-heal or backfill once the stream is reactivated. The Warehouse-based engine is unaffected by
-  this either way.
+  Because the Spark engine is purely event-driven (it only sees a copy event if the OpenLineage
+  listener emitted it live while the Eventstream was running - there is no API to retroactively ask
+  Spark what it read/wrote), an undetected Eventstream outage is a silent data gap for that whole
+  window - it will not self-heal or backfill once the stream is reactivated. The Warehouse-based
+  engine is unaffected by this either way.
 
 ### Optional: simulate a test scenario
 
@@ -521,10 +500,12 @@ its new GUID before redeploying them:
 
 **Two important caveats learned the hard way while building this solution:**
 
-1. **Converting an Import/DirectQuery semantic model to Direct Lake in place is not supported** by
-   `updateDefinition` — it fails with *"Converting existing tables or partitions from Import or
-   DirectQuery mode to Direct Lake is not supported."* You must delete the old semantic model item
-   and create a fresh one (new GUID), then repoint the report/Data Agent as above.
+1. **A Direct Lake semantic model cannot be updated in place** via `updateDefinition` — even schema-only
+   changes (e.g. adding a column/measure) fail with errors like *"Converting existing tables or
+   partitions from Import or DirectQuery mode to Direct Lake is not supported"* once the model has
+   already been created. You must delete the old semantic model item and create a fresh one (new
+   GUID), then repoint the report/Data Agent as above. This repo's deploy script always does exactly
+   that (delete-then-recreate) for the semantic model, every deployment.
 2. **A report referencing a shared theme by name (`themeCollection.baseTheme`) must also ship the
    actual theme JSON file** under `StaticResources/SharedResources/BaseThemes/<ThemeName>.json`
    *and* a matching `resourcePackages` entry in `report.json` — a `model.bim`/report deploy that
