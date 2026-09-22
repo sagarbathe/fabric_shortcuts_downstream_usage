@@ -353,6 +353,74 @@ function Get-EventstreamCustomEndpointConnection {
     return $conn.Content | ConvertFrom-Json
 }
 
+function New-EventHubSasToken {
+    <#
+      Builds a SAS token for the Event Hubs HTTPS "Send Event" REST API from a full connection
+      string (Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...) and target event hub
+      name - the same kind of connection string Get-EventstreamCustomEndpointConnection returns.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ConnectionString,
+        [Parameter(Mandatory)][string]$EventHubName,
+        [int]$ExpiryMinutes = 10
+    )
+    $parts = @{}
+    foreach ($kv in ($ConnectionString -split ";")) {
+        if ($kv -match "^([^=]+)=(.*)$") { $parts[$Matches[1]] = $Matches[2] }
+    }
+    $keyName = $parts["SharedAccessKeyName"]
+    $key = $parts["SharedAccessKey"]
+    $hostName = ($parts["Endpoint"] -replace "^sb://", "") -replace "/$", ""
+    if (-not $keyName -or -not $key -or -not $hostName) { throw "Connection string is missing Endpoint/SharedAccessKeyName/SharedAccessKey." }
+
+    Add-Type -AssemblyName System.Web
+    $resourceUri = "https://$hostName/$EventHubName"
+    $encodedUri = [System.Web.HttpUtility]::UrlEncode($resourceUri)
+    $expiry = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + ($ExpiryMinutes * 60)
+    $stringToSign = "$encodedUri`n$expiry"
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256
+    $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($key)
+    $signature = [Convert]::ToBase64String($hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($stringToSign)))
+    $encodedSignature = [System.Web.HttpUtility]::UrlEncode($signature)
+    return @{
+        Token    = "SharedAccessSignature sr=$encodedUri&sig=$encodedSignature&se=$expiry&skn=$keyName"
+        HostName = $hostName
+    }
+}
+
+function Send-EventHubTestEvent {
+    <#
+      Sends one throwaway JSON event to an Event Hub via the plain HTTPS "Send Event" REST API -
+      deliberately NOT the Kafka wire protocol / any Kafka client library. This is used to seed a
+      single sample event on a brand-new Eventstream, because the Fabric portal's Eventhouse
+      destination "Configure" wizard has an Inspect step that needs at least one live sample to
+      enable Finish - which never arrives on its own on a fresh deploy with no real traffic yet.
+      A plain Kafka producer (e.g. kafka-python) reliably fails against this Kafka-compatible
+      endpoint with metadata-fetch timeouts even for Send-capable credentials (consistent with the
+      Send-only/Listen-blocked behavior documented in NB_CopyEventDetection_SparkKafka.Notebook's
+      header) - the plain Event Hubs REST send endpoint works with zero extra dependencies beyond
+      PowerShell itself, which is why this solution's deploy tooling can rely on it for every user,
+      not just an environment that happens to have a working Kafka client installed.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$EventHubName,
+        [Parameter(Mandatory)][string]$ConnectionString,
+        [hashtable]$Event
+    )
+    if (-not $Event) {
+        $Event = @{
+            eventTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            eventType = "TEST_SAMPLE"
+            note      = "Throwaway sample event auto-sent by Deploy-ShortcutMonitoring.ps1 to unblock the Eventstream destination Configure wizard - safe to ignore/delete from ol_raw_events."
+        }
+    }
+    $sas = New-EventHubSasToken -ConnectionString $ConnectionString -EventHubName $EventHubName
+    $body = $Event | ConvertTo-Json -Depth 10 -Compress
+    $uri = "https://$($sas.HostName)/$EventHubName/messages?timeout=60&api-version=2014-01"
+    $headers = @{ Authorization = $sas.Token; "Content-Type" = "application/atom+xml;type=entry;charset=utf-8" }
+    Invoke-WebRequest -Uri $uri -Method Post -Headers $headers -Body $body -UseBasicParsing | Out-Null
+}
+
 function Confirm-FabricEventstreamRunning {
     <# Ensures every source/destination node of an Eventstream is actually 'Running', not just
        'published'. An Eventstream can silently end up Paused (manual portal action, an underlying
@@ -401,6 +469,20 @@ function Confirm-FabricEventstreamRunning {
     }
 
     $portalUrl = "https://app.fabric.microsoft.com/groups/$WorkspaceId/eventstreams/$EventstreamId"
+
+    # Best-effort: seed one throwaway sample event before prompting, so the portal's destination
+    # Configure wizard has something to Inspect - on a brand-new deploy there's no real traffic yet
+    # and that step would otherwise spin forever waiting for data (see Send-EventHubTestEvent doc).
+    $sentSampleEvent = $false
+    try {
+        $kafkaConn = Get-EventstreamCustomEndpointConnection -WorkspaceId $WorkspaceId -Headers $Headers -EventstreamId $EventstreamId
+        Send-EventHubTestEvent -EventHubName $kafkaConn.eventHubName -ConnectionString $kafkaConn.accessKeys.primaryConnectionString | Out-Null
+        $sentSampleEvent = $true
+        Write-Host "  Sent one throwaway sample event to the Eventstream, in case the destination wizard's Inspect step needs it."
+    } catch {
+        Write-Warning "  Could not auto-send a sample event ($($_.Exception.Message)) - if the destination wizard's Inspect step hangs waiting for data, re-run this step or trigger any real event manually."
+    }
+
     while ($true) {
         Write-Warning "  Eventstream still has non-Running node(s) after $MaxAttempts automated resume attempt(s)."
         Write-Host ""
@@ -409,6 +491,9 @@ function Confirm-FabricEventstreamRunning {
         Write-Host "    2. Click the 'RawCapture' destination node."
         Write-Host "    3. Confirm 'Eventhouse' and 'KQL Database' both resolve to a real item (not 'Item not found')."
         Write-Host "    4. If not, complete the destination wizard: Eventhouse -> KQL Database -> Get data -> select/inspect table 'ol_raw_events' -> Finish."
+        if ($sentSampleEvent) {
+            Write-Host "       (A throwaway sample event was already sent for you, in case the Inspect step needs one to enable Finish - use whichever mapping option is offered, since ol_raw_events already has our own schema-free mapping 'ol_raw_events_map'.)"
+        }
         Write-Host "    5. Click Publish if the canvas still shows 'Edit mode'."
         Write-Host ""
         $response = Read-Host "  Press Enter once done to re-check (or type 'skip' to continue without verifying)"
