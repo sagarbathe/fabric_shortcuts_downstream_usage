@@ -962,15 +962,29 @@ def resolve_principals_to_username(principal_ids):
 
 try:
     job_instance_ids_by_workspace = {}
+    extraction_failures = []
     for cw in matched_writes:
         jid = extract_job_instance_id(cw.get("job_name"), cw.get("hosting_item_name"))
         cw["job_instance_id"] = jid
         if jid:
             job_instance_ids_by_workspace.setdefault(cw["hosting_workspace_id"], set()).add(jid)
+        elif len(extraction_failures) < 5:
+            extraction_failures.append((cw.get("hosting_item_name"), cw.get("job_name")))
+    # TEMP DIAGNOSTIC (safe to remove once username resolution is confirmed working end-to-end):
+    # surfaces exactly why extract_job_instance_id came back empty-handed for a run, since that is
+    # otherwise indistinguishable from every other silent failure mode further below.
+    if extraction_failures:
+        print(f"DIAG: JobInstanceId extraction failed for {len(extraction_failures)} of "
+              f"{len(matched_writes)} matched write(s) (showing up to 5) - hosting_item_name vs job_name:")
+        for hin, jn in extraction_failures:
+            print(f"  hosting_item_name={hin!r} job_name={jn!r}")
 
     principal_by_job_instance = {}  # job_instance_id -> (principal_id, principal_type)
     for ws_id, jids in job_instance_ids_by_workspace.items():
-        principal_by_job_instance.update(query_executing_principals(ws_id, jids))
+        result = query_executing_principals(ws_id, jids)
+        print(f"DIAG: queried {len(jids)} JobInstanceId(s) in workspace {ws_id}, "
+              f"ItemJobEventLogs returned {len(result)} match(es).")
+        principal_by_job_instance.update(result)
 
     all_principal_ids = {v[0] for v in principal_by_job_instance.values() if v and v[0]}
     username_by_principal_id = resolve_principals_to_username(all_principal_ids)
