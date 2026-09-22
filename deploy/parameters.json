@@ -53,12 +53,12 @@
     },
     {
       "name": "KAFKA_TOPIC_NAME",
-      "literal": "esehbnjzmxu954h0iqynlc_eh",
+      "literal": "esehbng88vpo1ej4n3s5du_eh",
       "resolvedFrom": "step 06-Environment: live eventHubName from the newly-created Eventstream's CustomEndpoint source connection"
     },
     {
       "name": "KAFKA_BOOTSTRAP_SERVERS",
-      "literal": "esehbnjzmxu954h0iqynlc.servicebus.windows.net:9093",
+      "literal": "esehbng88vpo1ej4n3s5du.servicebus.windows.net:9093",
       "resolvedFrom": "step 06-Environment: live fullyQualifiedNamespace (+':9093') from the same connection lookup"
     },
     {
