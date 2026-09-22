@@ -57,6 +57,61 @@ flowchart TD
     M --> N["Advance SparkKafkaLineageWatermark"]
 ```
 
+### Identifying who ran it (`FactCopyEvent.username`)
+
+Neither engine's native lineage source carries a user identity, so each is resolved differently:
+
+- **Warehouse:** `queryinsights.exec_requests_history` already exposes `login_name` — no extra
+  correlation needed, it's added straight to the same SELECT that finds the copy statement.
+- **SparkKafka:** OpenLineage carries no identity at all, but its `job.name` field happens to embed
+  the exact Fabric **`JobInstanceId`** of the notebook run that produced it (dashes stripped, then
+  reinserted at GUID positions after the notebook-name prefix — verified empirically, not officially
+  documented). That `JobInstanceId` is then joined, in the monitored workspace's own auto-provisioned
+  **Monitoring KQL database**, against `ItemJobEventLogs.ExecutingPrincipalId` — an exact-GUID join,
+  not a time-window heuristic — and the resulting AAD object id is resolved to a friendly
+  UPN/display name via a Microsoft Graph `directoryObjects/{id}` lookup (falls back to the raw GUID
+  if Graph resolution fails).
+
+```mermaid
+flowchart TD
+    A["ol_lineage_events_v3 row<br/>(job.name contains embedded JobInstanceId)"] --> B["extract_job_instance_id()<br/>strip/reinsert dashes -> exact GUID"]
+    B --> C["Query monitored workspace's<br/>Monitoring KQL DB: ItemJobEventLogs<br/>WHERE JobInstanceId = extracted GUID"]
+    C --> D["ExecutingPrincipalId (AAD object id)"]
+    D --> E["Microsoft Graph<br/>GET /v1.0/directoryObjects/{id}"]
+    E -- resolved --> F["username = UPN/display name"]
+    E -- failed/no permission --> G["username = raw AAD object id (fallback)"]
+```
+
+**Note:** `username` is only populated for rows written *after* this column was added — there is no
+backfill for historical `FactCopyEvent` rows written before the feature existed (they remain blank).
+
+### Historical copy-event coverage (how far back each engine can "see")
+
+Both copy-event engines are **incremental/watermark-based**, not full-history backfills, but how far back their *first*
+run can reach differs a lot because of what each one reads from:
+
+- **Spark engine (`NB_CopyEventDetection_SparkKafka`) — no history at all.** This engine is purely event-driven: it
+  only sees a copy event if the OpenLineage Spark listener emitted it live, through `ES_OpenLineageEvents`, into
+  `ol_lineage_events_v3`, while the environment was attached and the eventstream was running. There is no API to
+  retroactively ask Spark "what did you read/write last month" - if a shortcut-reading Spark job ran before this
+  solution (and `ENV_OpenLineage`) was deployed and attached, that copy event is gone forever and will never appear
+  in `FactCopyEvent`. **Only copy events produced by Spark notebook runs *after* this solution is deployed and the
+  notebook is attached to `ENV_OpenLineage` are captured.**
+- **Warehouse engine (`NB_CopyEventDetection_Warehouse`) — bounded by Fabric's Query Insights retention.** This
+  engine mines `[warehouse].[queryinsights].[exec_requests_history]`, which is a Microsoft-managed system view, not
+  something this solution populates. Per Fabric documentation, **Query Insights retains historical query execution
+  data for 30 days** (see [Query Insights - Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/data-warehouse/query-insights)).
+  This means on its *first* run, the Warehouse engine can discover shortcut-reading CTAS/INSERT-SELECT statements
+  that ran up to ~30 days before deployment - but nothing older than that; anything beyond the 30-day window has
+  already rolled off `exec_requests_history` and cannot be recovered. After the first run, the watermark
+  (`CopyEventWatermark`) takes over and every 15-minute scheduled run only looks for statements newer than the
+  last processed `start_time`, so no gaps open up going forward as long as the pipeline keeps running on schedule.
+
+**Practical implication:** treat the day this solution is first deployed as the effective start of continuous
+copy-event monitoring. Warehouse copy events from up to ~30 days prior may show up once, but Spark copy events
+have zero retroactive visibility - if you need to know about Spark-based copies that happened before deployment,
+that information does not exist anywhere in Fabric and cannot be reconstructed.
+
 ## Repo layout
 
 ```
@@ -103,8 +158,8 @@ descriptions, all reused verbatim as the semantic model's own metadata:
 
 | Item | Type | Purpose |
 |---|---|---|
-| `SM_ShortcutMonitoring.SemanticModel` | Semantic Model | **Direct Lake** model over `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`, `FactShortcutInventoryDiff` — reads the Delta tables straight from OneLake (via the Lakehouse's own SQL analytics endpoint, using the `Sql.Database`-with-`mode: directLake` connector — the only Direct Lake source kind the Fabric engine accepts from a hand-authored `model.bim`; a generic `AzureStorage.DataLake(...)` M expression is rejected at import time even though it looks plausible). No import/refresh in the traditional sense. Each Fact table carries a real, materialized `shortcut_sk` column (written by the notebooks) so it can relate to `DimShortcut` on a real key (Direct Lake relationships can't use a calculated column as a join key). `vw_FactCopyEvent_SourceStatus`'s two enrichment values (`Source Shortcut Exists Now`, `Source Removed At`) are reproduced as measures on `FactCopyEvent` — the model uses **no calculated columns or calculated tables at all**, only sourced columns and ~25 measures (`Flagged Copy Events`, `Flagged %`, `Duplicate Groups`, `Net Shortcut Change`, `Group Member Count`, `Copy Event Detected At`, etc.). Every table/column carries the same description shown in the Data Dictionary, so Copilot/Q&A and the Data Agent can reason about them directly. |
-| `RPT_ShortcutMonitoring.Report` | Report | Sample 4-page Power BI report bound to `SM_ShortcutMonitoring`: **Executive Summary** (KPI cards + trend), **Copy Events** (engine slicer, trend chart, detail table), **Duplicate Shortcuts** (severity breakdown, detail table), **Inventory & Churn** (added/removed trend, lifecycle table). |
+| `SM_ShortcutMonitoring.SemanticModel` | Semantic Model | **Direct Lake** model over `DimShortcut`, `FactCopyEvent`, `FactDuplicateShortcutGroup`, `FactShortcutInventoryDiff` — reads the Delta tables straight from OneLake (via the Lakehouse's own SQL analytics endpoint, using the `Sql.Database`-with-`mode: directLake` connector — the only Direct Lake source kind the Fabric engine accepts from a hand-authored `model.bim`; a generic `AzureStorage.DataLake(...)` M expression is rejected at import time even though it looks plausible). No import/refresh in the traditional sense. Each Fact table carries a real, materialized `shortcut_sk` column (written by the notebooks) so it can relate to `DimShortcut` on a real key (Direct Lake relationships can't use a calculated column as a join key). `vw_FactCopyEvent_SourceStatus`'s two enrichment values (`Source Shortcut Exists Now`, `Source Removed At`) are reproduced as measures on `FactCopyEvent` — the model uses **no calculated columns or calculated tables at all**, only sourced columns and ~27 measures (`Flagged Copy Events`, `Flagged %`, `Duplicate Groups`, `Net Shortcut Change`, `Group Member Count`, `Copy Event Detected At`, `Distinct Users`, `Copy Events - Unknown User`, etc.). `FactCopyEvent` also carries the `username` column (the identity that executed the copy — `login_name` for Warehouse, Graph-resolved principal for SparkKafka). Every table/column carries the same description shown in the Data Dictionary, so Copilot/Q&A and the Data Agent can reason about them directly. |
+| `RPT_ShortcutMonitoring.Report` | Report | Sample 5-page Power BI report bound to `SM_ShortcutMonitoring`: **Executive Summary** (KPI cards + trend), **Copy Events** (engine slicer, trend chart, detail table), **User Analysis** (user slicer, distinct-users/unknown-user KPI cards, copy events by user bar chart, copy events over time by user trend, per-user activity detail table), **Duplicate Shortcuts** (severity breakdown, detail table), **Inventory & Churn** (added/removed trend, lifecycle table). |
 | `DA_ShortcutMonitoring.DataAgent` | Data Agent | Natural-language Q&A agent bound to `SM_ShortcutMonitoring`, with `aiInstructions` covering all 3 areas (copy-event risk, duplicate-shortcut governance, inventory/churn) and 4 few-shot DAX examples. |
 
 Because the semantic model lives in the same workspace as the Lakehouse, Direct Lake resolves
@@ -131,8 +186,8 @@ extended without hand-editing the underlying JSON.
 | `NB_ShortcutInventory_DuplicateDetection.Notebook` | Notebook | Enumerates Lakehouse/Warehouse shortcuts across monitored workspaces via the monitoring service principal, upserts `DimShortcut`, computes shortcut add/remove lifecycle events, and flags duplicate shortcuts (same hosting item = High severity; same hosting workspace/different item = Medium; cross-workspace same-source is not flagged). |
 | `NB_CopyEventDetection_Warehouse.Notebook` | Notebook | **Warehouse engine**. Mines Fabric Warehouse Query Insights (`exec_requests_history`) for CTAS/INSERT-SELECT statements sourced from a known shortcut and records them to `FactCopyEvent` (`engine = 'Warehouse'`). |
 | `NB_CopyEventDetection_SparkKafka.Notebook` | Notebook | Kafka/Eventstream-based variant of the Spark copy-event rule; writes to `FactCopyEvent` with `engine = 'SparkKafka'`, fed by the `ES_OpenLineageEvents` Eventstream. |
-| `NB_OpenLineage_Validate.Notebook` | Notebook | Validation notebook exercising a real shortcut read + save so the `ENV_OpenLineage` environment's `OpenLineageSparkListener` emits START/COMPLETE lineage events to the Kafka transport for testing. |
-| `ENV_OpenLineage.Environment` | Environment | Spark environment with the OpenLineage listener configured, attached to the OpenLineage-instrumented notebooks. |
+| `NB_OpenLineage_Validate.Notebook` | Notebook | Deployed into **each monitored workspace** (not the solution's own workspace) alongside that workspace's local `ENV_OpenLineage`. Validation notebook exercising a real shortcut read + save so `OpenLineageSparkListener` emits START/COMPLETE lineage events to the Kafka transport for testing. |
+| `ENV_OpenLineage.Environment` | Environment | Deployed into **each monitored workspace** (Fabric environments can't be attached cross-workspace) with the OpenLineage listener configured and pointed at the solution's central Eventstream's Kafka endpoint. Attached locally to `NB_OpenLineage_Validate` and any Spark notebooks in that workspace you want lineage-instrumented. Not deployed in the solution's own workspace. |
 | `ES_OpenLineageEvents.Eventstream` | Eventstream | Ingests OpenLineage events (emitted by `ENV_OpenLineage`) for downstream copy-event correlation. |
 | `PL_ShortcutMonitoringOrchestrator.DataPipeline` | Data Pipeline | Orchestrates the solution: runs `NB_ShortcutInventory_DuplicateDetection` first, then fans out to `NB_CopyEventDetection_Warehouse` and `NB_CopyEventDetection_SparkKafka` in parallel (each only does work if enabled in config). Has a 15-minute Cron schedule, **created disabled** — enable it in the Fabric portal (Settings → Schedule) once the solution is validated. |
 
@@ -159,8 +214,17 @@ can't retroactively change a platform-level schedule that already decided to run
 
 ## Building the `ENV_OpenLineage` environment (Spark + Kafka secret)
 
-`ENV_OpenLineage.Environment/Setting/Sparkcompute.yml` configures the Spark environment attached to
-the OpenLineage-instrumented notebooks (`NB_OpenLineage_Validate`, `NB_CopyEventDetection_SparkKafka`).
+> If you're using **Option A** (`deploy/Deploy-ShortcutMonitoring.ps1`), this entire section is
+> automated for you — the script reads the Eventstream's live Kafka connection details via the
+> Fabric REST API and publishes the environment automatically. This section is only needed for
+> **Option B/C** (Git integration / manual builds) or to understand/rotate the secret afterward.
+
+`ENV_OpenLineage.Environment/Setting/Sparkcompute.yml` configures the Spark environment deployed into
+**each monitored workspace** (not the solution's own) and attached to `NB_OpenLineage_Validate` there,
+plus any other Spark notebooks in that workspace you want OpenLineage-instrumented. Note
+`NB_CopyEventDetection_SparkKafka.Notebook` (deployed once, in the solution's own workspace) does
+**not** need this environment — it only reads the resulting `ol_lineage_events_v3` table with plain
+Spark.
 To rebuild it from scratch (or verify an existing one):
 
 1. **Spark library:** add `io.openlineage:openlineage-spark_2.12:1.53.0` (or current version) as a
@@ -242,30 +306,81 @@ To rebuild it from scratch (or verify an existing one):
      one Warehouse only (least privilege) and does **not** grant access to the warehouse's actual
      business data (that would additionally require **"Read all data using SQL"/`ReadData`**, which
      this solution does not need).
+  3. To populate `FactCopyEvent.username`, the SP additionally needs:
+     - Read access (Viewer role is enough) to each monitored workspace's auto-provisioned
+       **Monitoring KQL database** (created when that workspace has
+       [Workspace Monitoring](https://learn.microsoft.com/en-us/fabric/fundamentals/enable-workspace-monitoring)
+       enabled) — queried for `ItemJobEventLogs.ExecutingPrincipalId`, which identifies who ran the
+       Spark notebook that produced a SparkKafka-engine copy event (`login_name` from Query Insights
+       already covers the Warehouse engine, no extra permission needed there).
+     - Microsoft Graph **`User.Read.All`** (or `Directory.Read.All`) **application permission, with
+       admin consent**, so the notebook can resolve that raw AAD object id into a friendly
+       UPN/display name via `GET /v1.0/directoryObjects/{id}`. Without this, `username` for
+       SparkKafka-engine rows falls back to the raw AAD object id GUID instead of failing the run.
 - `config.json` deployed to `LH_ShortcutMonitoring/Files/config/config.json` with the monitored
   workspace list, detection thresholds, and the service principal's `clientSecret` filled in
   manually (see `config.example.json`).
-- The `ENV_OpenLineage` environment built and its Kafka secret populated manually (see **Building the
-  `ENV_OpenLineage` environment** above), **and explicitly attached as the Spark session environment**
-  on `NB_OpenLineage_Validate.Notebook` and `NB_CopyEventDetection_SparkKafka.Notebook` (notebook →
-  **Environment** dropdown in the top toolbar) — if you plan to use the Spark/OpenLineage copy-event
-  engine. Fabric notebooks don't inherit a workspace-default environment automatically for this
-  purpose; without this environment attached, `OpenLineageSparkListener` never loads, no events reach
-  Kafka, and the Spark engine silently detects nothing.
+- The `ENV_OpenLineage` environment built with its Kafka config populated in **each monitored
+  workspace** (automatic if you used `deploy/Deploy-ShortcutMonitoring.ps1` — step 6 loops over
+  `config.monitoredWorkspaces` and deploys `ENV_OpenLineage` + `NB_OpenLineage_Validate` into each
+  one; nothing is deployed to the solution's own workspace for this; manual via **Building the
+  `ENV_OpenLineage` environment** above otherwise), **and explicitly attached as the Spark session
+  environment** on that monitored workspace's `NB_OpenLineage_Validate.Notebook` (notebook →
+  **Environment** dropdown in the top toolbar) — only needed if you want to validate the Spark/Kafka
+  lineage pipeline end-to-end with a real simulated shortcut read there.
+  `NB_CopyEventDetection_SparkKafka.Notebook` (deployed once, in the solution's own workspace) does
+  **not** need this environment attached — it only reads the resulting `ol_lineage_events_v3` table
+  with plain Spark, it doesn't emit lineage events itself. For the Spark/OpenLineage engine to detect
+  *real* copy events in production, it's each **monitored workspace's own** notebooks (the ones
+  actually performing shortcut reads/writes — outside the scope of this repo/deployment, since they
+  belong to other teams) that must have their own environment with `OpenLineageSparkListener` + this
+  same Kafka transport config attached (their own local `ENV_OpenLineage`, deployed by step 6); without
+  that, no lineage events reach Kafka and this engine detects nothing for that workspace (the
+  Warehouse-based engine is unaffected either way). This notebook-attach step is **not**
+  automatable via the Fabric API and must always be done manually in the portal, even with Option A.
 - At least one existing OneLake **shortcut** in a monitored workspace that has already been read and
   saved as-is (via Spark or Warehouse) — this is what the copy-event engines actually detect. If you
   don't already have such a scenario to test against, see **Optional: simulate a test scenario** below.
+- **`ES_OpenLineageEvents` must be actively running** (not paused/inactive) for the Spark copy-event
+  engine to see anything. Unlike a pipeline, an Eventstream doesn't run on a schedule - once
+  published it streams continuously - but its source/destination nodes can be manually paused, or can
+  end up in an `Error`/`Warning` state, without raising any alert of their own. Check this
+  periodically (there is no automated check for it in this solution):
+  1. Open `ES_OpenLineageEvents` in the workspace and look at the node status badges on its canvas:
+     **Active** (flowing), **Inactive** (paused), **Error**, or **Warning**.
+  2. Check the **Data insights** tab for live throughput (events/sec) to confirm data is actually
+     moving, not just "not erroring."
+  3. If a node shows **Inactive**, select it and **Activate** it (or use **Activate All** from the
+     toolbar) - you can choose to resume from where it left off or from a custom time.
+  4. *(Optional, not required by this solution)* if you want automated status checks instead of
+     manually checking the portal, Fabric's separate **Workspace Monitoring** feature can be enabled
+     for the workspace, which exposes an `EventStreamNodeStatus` table you could query. This solution
+     does not deploy, depend on, or query Workspace Monitoring itself - manually checking the
+     Eventstream canvas (steps 1-3 above) is sufficient.
+
+  Because the Spark engine has **zero retroactive visibility** (see **Historical copy-event coverage**
+  above), an undetected Eventstream outage is a silent data gap for that whole window - it will not
+  self-heal or backfill once the stream is reactivated. The Warehouse-based engine is unaffected by
+  this either way.
 
 ### Optional: simulate a test scenario
 
 If no shortcut read + save-as-is has happened yet in a monitored workspace, you can manufacture one
 per engine so you have something for the detection notebooks to find:
 
-- **Spark engine:** run `fabric/notebooks/NB_OpenLineage_Validate.Notebook`. It reads an existing
-  OneLake shortcut and writes it out unmodified via Spark, which is exactly the "read and saved as-is"
-  pattern the Spark/OpenLineage-based engine (`NB_CopyEventDetection_SparkKafka`) looks for. Update the
-  hardcoded source shortcut path in its first cell to point at a real shortcut in your tenant before
-  running.
+- **Spark engine:** run `NB_OpenLineage_Validate.Notebook` in the monitored workspace you want to
+  test (deployed there by step 6, alongside that workspace's local `ENV_OpenLineage`). It has no
+  default lakehouse attached — edit its `SOURCE_PATH`/`OUTPUT_PATH` placeholders in cell 1 to a real
+  OneLake shortcut and a writable table location in that workspace (fully-qualified `abfss://` paths;
+  see the notebook's own comments for exactly what to fill in) - the "read and saved as-is" pattern
+  `NB_CopyEventDetection_SparkKafka` looks for. Cell 2 then waits and reads back from the *solution's
+  own* central `ol_lineage_events_v3` table (all monitored workspaces publish to the same shared
+  Kafka topic/sink table) to confirm the event arrived. **Caution:** avoid any literal value
+  (workspace name/id, lakehouse name/id, etc.) that also appears in
+  `deploy/parameters.json` - `Get-ItemDefinitionParts` does a blind find/replace of every
+  `parameters.json` literal across *all* template files at deploy time, so a coincidental match (e.g.
+  reusing this repo's own original dev workspace name) gets silently rewritten to the current target
+  workspace's value instead of staying as the external path you intended.
 - **Warehouse engine:** open the SQL query editor against a monitored Warehouse (that hosts, or has a
   shortcut to, a source table) and run a CTAS statement reading straight from the shortcut with no
   column reduction, e.g.:
@@ -298,8 +413,8 @@ dependency order, with a verification check after each step - no Git integration
    ```powershell
    .\Deploy-ShortcutMonitoring.ps1 -ConfigPath .\deploy.config.json
    ```
-3. The script runs 12 steps (workspace → folders → Lakehouse → config.json upload → Environment →
-   Eventstream → Notebooks → Pipeline → an initial pipeline run to seed the Fact/Dim tables →
+3. The script runs 12 steps (workspace → folders → Lakehouse → config.json upload → Eventstream →
+   Environment → Notebooks → Pipeline → an initial pipeline run to seed the Fact/Dim tables →
    Semantic Model → Report → Data Agent), printing an `[OK]` verification line after each one, and
    persists resolved item ids to `.deploy-state.<workspaceId>.json` so re-runs update items in place
    instead of recreating them.
@@ -308,11 +423,30 @@ dependency order, with a verification check after each step - no Git integration
    ```powershell
    .\Deploy-ShortcutMonitoring.ps1 -ConfigPath .\deploy.config.json -SkipSteps 1,2,3,4,5,6,7,8,9
    ```
-5. Two things the script deliberately does **not** automate (Fabric has no definition-API surface for
-   either): populating the `ENV_OpenLineage` environment's Kafka secret (see **Building the
-   `ENV_OpenLineage` environment** below), and attaching that environment to
-   `NB_OpenLineage_Validate.Notebook`/`NB_CopyEventDetection_SparkKafka.Notebook` in the portal's
-   notebook **Environment** dropdown. The script prints a reminder for both after step 5.
+5. Step 6 (Environment) runs **after** Eventstream (step 5) is created, and automatically reads the
+   Eventstream's `CustomEndpoint` source's live Kafka connection details (topic name, bootstrap
+   server, SAS connection string) via the Fabric REST API, bakes them into `Sparkcompute.yml`, and
+   loops over `config.monitoredWorkspaces` to deploy/publish `ENV_OpenLineage` **and**
+   `NB_OpenLineage_Validate` into **each** monitored workspace — **not** the solution's own workspace
+   — **no manual Kafka-secret copy/paste is needed anymore.** The one thing the script still cannot
+   automate (no definition-API surface exists for it) is attaching each monitored workspace's own
+   `ENV_OpenLineage` to its own `NB_OpenLineage_Validate.Notebook` — the only deployed notebook that
+   actually emits lineage events (`NB_CopyEventDetection_SparkKafka.Notebook`, deployed once in the
+   solution's own workspace by step 7, just reads the resulting table and does not need this
+   environment) — in the portal's notebook **Environment** dropdown. Step 6 prints an
+   "ACTION NEEDED" reminder for each monitored workspace at the end of its loop iteration — it's
+   purely informational and doesn't pause the script, since `NB_OpenLineage_Validate` is a standalone
+   diagnostic notebook never run by the pipeline.
+
+   > ⚠️ **Only `NB_OpenLineage_Validate` needs its monitored workspace's `ENV_OpenLineage` explicitly
+   > selected as its Spark session environment** (notebook → **Environment** dropdown, not the
+   > workspace default) — it's
+   > the only notebook in this repo that performs an actual simulated shortcut read/save and emits a
+   > lineage event. Fabric notebooks do **not** inherit a workspace-default environment for this
+   > purpose; without it attached, that notebook's test run produces no lineage event. For *real*
+   > production detection via this engine, it's each **monitored workspace's own** notebooks (outside
+   > this repo) that need `OpenLineageSparkListener` + Kafka transport configured — see the
+   > Prerequisites note above.
 6. `fabric/**` is the templated source of truth for this script - `deploy/parameters.json`
    lists every literal value (workspace id, lakehouse id, SQL endpoint, notebook ids, semantic model
    id) it substitutes per item before upload. If you hand-edit an item's files directly in this repo

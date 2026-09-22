@@ -209,7 +209,7 @@ FactDuplicateShortcutGroup = {
         ),
         measure(
             "Duplicate Group Detected At",
-            "MAXX(FactDuplicateShortcutGroup, DATETIMEVALUE(SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \")))",
+            "MAXX(FactDuplicateShortcutGroup, VAR t = SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
             "detected_ts parsed into a proper datetime, for use in date slicers/axes.",
             formatString="General Date",
         ),
@@ -250,8 +250,8 @@ FactCopyEvent = {
         col("is_select_star", "boolean", "TRUE if the statement used SELECT * (Warehouse) / retained all columns (SparkKafka)."),
         col("is_shortcut_read_and_saved_as_is", "boolean", "TRUE if is_select_star OR retention_pct > threshold_pct_at_detection - the flag this whole solution exists to raise."),
         col("threshold_pct_at_detection", "double", "Configurable retention threshold (config.detection.columnRetentionThresholdPercent) in effect when this row was computed.", formatString="0.0\"%\""),
-        col("query_start_time", "string", "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' measure for a proper datetime.", hidden=True),
-        col("detected_ts", "string", "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' measure for a proper datetime.", hidden=True),
+        col("copy_event_starttime", "string", "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' measure for a proper datetime.", hidden=True),
+        col("copy_event_detected_time", "string", "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' measure for a proper datetime.", hidden=True),
     ],
     "measures": [
         measure("Total Copy Events", "COUNTROWS(FactCopyEvent)", "Count of all detected copy events (both engines) in the current filter context."),
@@ -273,14 +273,14 @@ FactCopyEvent = {
         ),
         measure(
             "Copy Event Detected At",
-            "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[detected_ts], 19), \"T\", \" \")))",
-            "detected_ts parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "MAXX(FactCopyEvent, VAR t = SUBSTITUTE(LEFT(FactCopyEvent[copy_event_detected_time], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
+            "copy_event_detected_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
             formatString="General Date",
         ),
         measure(
             "Query Start At",
-            "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[query_start_time], 19), \"T\", \" \")))",
-            "query_start_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "MAXX(FactCopyEvent, VAR t = SUBSTITUTE(LEFT(FactCopyEvent[copy_event_starttime], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
+            "copy_event_starttime parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
             formatString="General Date",
         ),
         measure(

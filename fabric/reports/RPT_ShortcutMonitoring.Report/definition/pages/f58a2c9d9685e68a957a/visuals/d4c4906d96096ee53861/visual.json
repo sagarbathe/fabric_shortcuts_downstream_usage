@@ -1,13 +1,13 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "d5b8d6f0b294f975bc60",
+  "name": "d4c4906d96096ee53861",
   "position": {
-    "x": 135.11111111111111,
-    "y": 238.73015873015873,
-    "z": 1000,
-    "height": 440.88888888888891,
-    "width": 1144.8888888888889,
-    "tabOrder": 1000
+    "x": 135.25773195876289,
+    "y": 238.62542955326458,
+    "z": 4000,
+    "height": 481.64948453608247,
+    "width": 1144.7422680412371,
+    "tabOrder": 4000
   },
   "visual": {
     "visualType": "tableEx",
@@ -15,6 +15,20 @@
       "queryState": {
         "Values": {
           "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "Copy Event Detected At"
+                }
+              },
+              "queryRef": "FactCopyEvent.Copy Event Detected At",
+              "nativeQueryRef": "Copy Event Detected At"
+            },
             {
               "field": {
                 "Column": {
@@ -27,7 +41,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.engine",
-              "active": true
+              "nativeQueryRef": "engine"
             },
             {
               "field": {
@@ -41,7 +55,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.hosting_workspace_name",
-              "active": true
+              "nativeQueryRef": "hosting_workspace_name"
             },
             {
               "field": {
@@ -55,7 +69,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.matched_shortcut_database",
-              "active": true
+              "nativeQueryRef": "matched_shortcut_database"
             },
             {
               "field": {
@@ -69,7 +83,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.matched_shortcut_name",
-              "active": true
+              "nativeQueryRef": "matched_shortcut_name"
             },
             {
               "field": {
@@ -83,21 +97,26 @@
                 }
               },
               "queryRef": "FactCopyEvent.dest_table",
-              "active": true
+              "nativeQueryRef": "dest_table"
             },
             {
               "field": {
-                "Column": {
+                "Aggregation": {
                   "Expression": {
-                    "SourceRef": {
-                      "Entity": "FactCopyEvent"
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "FactCopyEvent"
+                        }
+                      },
+                      "Property": "retention_pct"
                     }
                   },
-                  "Property": "retention_pct"
+                  "Function": 1
                 }
               },
-              "queryRef": "FactCopyEvent.retention_pct",
-              "active": true
+              "queryRef": "Avg(FactCopyEvent.retention_pct)",
+              "nativeQueryRef": "retention_pct"
             },
             {
               "field": {
@@ -111,7 +130,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.is_shortcut_read_and_saved_as_is",
-              "active": true
+              "nativeQueryRef": "is_shortcut_read_and_saved_as_is"
             },
             {
               "field": {
@@ -125,7 +144,7 @@
                 }
               },
               "queryRef": "FactCopyEvent.Source Shortcut Exists Now",
-              "active": true
+              "nativeQueryRef": "Source Shortcut Exists Now"
             }
           ]
         }
@@ -148,139 +167,18 @@
                   "Value": "'Copy Event Detail'"
                 }
               }
-            }
-          }
-        }
-      ],
-      "border": [
-        {
-          "properties": {
-            "show": {
+            },
+            "fontSize": {
               "expr": {
                 "Literal": {
-                  "Value": "true"
+                  "Value": "14D"
                 }
               }
             }
           }
         }
       ]
-    }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "390752a4e21846d4a666",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "engine"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "0477c7c70d143433095c",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "hosting_workspace_name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "342c52b036a3cd011eb9",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "matched_shortcut_database"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "a2ce77960107e6801287",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "matched_shortcut_name"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "b2993644e57a5e230cc8",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "dest_table"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "b7e2bfbe560e22e714a8",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "retention_pct"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "ff823bc77567b53521b6",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "is_shortcut_read_and_saved_as_is"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "cc3ffb60e96a578a786c",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "Source Shortcut Exists Now"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
+    },
+    "drillFilterOtherVisuals": true
   }
 }

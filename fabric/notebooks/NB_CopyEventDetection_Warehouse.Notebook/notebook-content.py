@@ -70,6 +70,35 @@ def log_error_to_lakehouse(stage, exc):
     except Exception:
         pass
 
+def with_delta_conflict_retry(fn, max_attempts=5, base_delay_seconds=5):
+    """Retries fn() on Delta optimistic-concurrency conflicts (ConcurrentAppendException,
+    MetadataChangedException, etc.) that can happen because FactCopyEvent is a SHARED table also
+    written to by the sibling engine notebook (Warehouse/SparkKafka) - e.g. one notebook's
+    ALTER TABLE ... COMMENT metadata commit landing while the other is mid-append. fn must be safe
+    to call more than once and should re-read any Spark state it needs from scratch each call
+    (not close over a stale DataFrame/snapshot) so each retry picks up the latest table version.
+    Re-raises unchanged after max_attempts, and immediately re-raises anything that isn't a
+    recognized Delta concurrency conflict."""
+    import time
+    conflict_markers = (
+        "ConcurrentAppendException", "MetadataChangedException", "ConcurrentDeleteReadException",
+        "ConcurrentDeleteDeleteException", "ConcurrentTransactionException", "ConcurrentWriteException",
+        "ProtocolChangedException",
+    )
+    last_exc = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except Exception as e:
+            if not any(marker in str(e) for marker in conflict_markers):
+                raise
+            last_exc = e
+            print(f"  Delta concurrency conflict on attempt {attempt}/{max_attempts} (likely the sibling "
+                  f"engine notebook committing to the same shared FactCopyEvent table concurrently) - "
+                  f"retrying in {base_delay_seconds}s: {str(e)[:200]}")
+            time.sleep(base_delay_seconds)
+    raise last_exc
+
 try:
     config_df = spark.read.text(f"{LAKEHOUSE_ABFSS}/Files/config/config.json")
     config_text = "\n".join([r["value"] for r in config_df.collect()])
@@ -109,6 +138,59 @@ try:
             print("No blank shortcut_sk rows to backfill (or DimShortcut not yet populated).")
 except Exception as e:
     log_error_to_lakehouse("migrate_factcopyevent_shortcut_sk", e)
+    raise
+
+# --- One-time schema migration guard: add severity to FactCopyEvent if the table already existed
+# from before this column was introduced. severity = 'High' for Table-type shortcuts, 'Medium' for
+# File-type shortcuts (this engine only ever detects copies FROM Warehouse-hosted shortcuts, which
+# are always Table-type - so every row this engine writes is 'High' - but historical rows are still
+# backfilled generically off DimShortcut.shortcut_path for consistency with NB_CopyEventDetection_SparkKafka,
+# in case a row's matched shortcut was hosted in a Lakehouse's Files section). ---
+try:
+    if spark.catalog.tableExists("FactCopyEvent"):
+        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
+        if "severity" not in existing_fields:
+            spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (severity STRING)")
+            print("Migrated FactCopyEvent: added severity column.")
+        else:
+            print("FactCopyEvent already has severity column - no migration needed.")
+
+        blank_count = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE severity IS NULL").collect()[0]["c"]
+        if blank_count > 0 and spark.catalog.tableExists("DimShortcut"):
+            spark.sql("""
+                MERGE INTO FactCopyEvent f
+                USING DimShortcut d
+                ON f.shortcut_sk = d.shortcut_sk
+                   AND f.severity IS NULL
+                WHEN MATCHED THEN UPDATE SET f.severity =
+                    CASE WHEN lower(trim(both '/' from d.shortcut_path)) = 'tables'
+                              OR lower(trim(both '/' from d.shortcut_path)) LIKE 'tables/%'
+                         THEN 'High' ELSE 'Medium' END
+            """)
+            remaining = spark.sql("SELECT COUNT(*) c FROM FactCopyEvent WHERE severity IS NULL").collect()[0]["c"]
+            print(f"Backfilled severity for {blank_count - remaining} historical row(s); {remaining} still unresolved (shortcut_sk unresolved or no longer in DimShortcut).")
+        else:
+            print("No blank severity rows to backfill (or DimShortcut not yet populated).")
+except Exception as e:
+    log_error_to_lakehouse("migrate_factcopyevent_severity", e)
+    raise
+
+# --- One-time schema migration guard: add username to FactCopyEvent if the table already existed
+# from before this column was introduced. Unlike shortcut_sk/severity, there is no backfill for
+# historical rows here - Query Insights history has its own retention window and isn't guaranteed
+# to still contain the original query, so old rows are simply left with a NULL username going
+# forward. Identical guard in NB_CopyEventDetection_SparkKafka - harmless/idempotent to have it in
+# both. ---
+try:
+    if spark.catalog.tableExists("FactCopyEvent"):
+        existing_fields = {f.name for f in spark.table("FactCopyEvent").schema.fields}
+        if "username" not in existing_fields:
+            with_delta_conflict_retry(lambda: spark.sql("ALTER TABLE FactCopyEvent ADD COLUMNS (username STRING)"))
+            print("Migrated FactCopyEvent: added username column.")
+        else:
+            print("FactCopyEvent already has username column - no migration needed.")
+except Exception as e:
+    log_error_to_lakehouse("migrate_factcopyevent_username", e)
     raise
 
 # config.orchestration.enabledEngines lets the pipeline call this notebook unconditionally on every
@@ -302,7 +384,8 @@ SELECT
     start_time,
     end_time,
     statement_type,
-    command AS query_text
+    command AS query_text,
+    login_name
 FROM [{warehouse_item_name}].[queryinsights].[exec_requests_history]
 WHERE start_time > '{since}'
   AND ( statement_type IN ('INSERT', 'CREATE TABLE AS SELECT', 'SELECT INTO')
@@ -326,6 +409,7 @@ try:
                     "distributed_statement_id": r["distributed_statement_id"],
                     "start_time": str(r["start_time"]), "end_time": str(r["end_time"]),
                     "statement_type": r["statement_type"], "query_text": r["query_text"],
+                    "login_name": r["login_name"],
                 })
         except Exception as inner_e:
             print(f"  WARN: could not query {wh['workspace_name']}/{wh['item_name']}: {inner_e}")
@@ -507,7 +591,10 @@ def get_source_column_count(connection_string, database_name, table_name, token)
     return row["col_count"]
 
 fact_copy_event_rows = []
-now_ts = datetime.now(timezone.utc).isoformat()
+# Plain "YYYY-MM-DD HH:MM:SS.ffffff" (no "T"/timezone suffix) to match copy_event_starttime's format
+# below (str() of a pyodbc/SQL datetime2 value) - keeps both FactCopyEvent timestamp-ish columns in
+# one Power-BI-friendly text format regardless of which engine notebook wrote the row.
+now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")
 
 try:
     for row in copy_events_from_shortcuts:
@@ -547,6 +634,8 @@ try:
             "matched_shortcut_name": row["matched_shortcut_name"],
             "matched_shortcut_database": row["matched_shortcut_database"],
             "shortcut_sk": row["matched_shortcut_sk"],
+            "severity": "High",  # Warehouse items only ever host Table-type shortcuts (no Files concept).
+            "username": row.get("login_name"),
             "dest_table": row["dest_table"],
             "source_column_count": source_col_count,
             "dest_column_count": dest_col_count,
@@ -555,8 +644,8 @@ try:
             "is_select_star": row["is_select_star"],
             "is_shortcut_read_and_saved_as_is": is_flagged,
             "threshold_pct_at_detection": THRESHOLD_PCT,
-            "query_start_time": row["start_time"],
-            "detected_ts": now_ts,
+            "copy_event_starttime": row["start_time"],
+            "copy_event_detected_time": now_ts,
         })
 
     print(f"Computed retention % for {len(fact_copy_event_rows)} copy event(s); "
@@ -587,6 +676,8 @@ FACT_COPY_EVENT_SCHEMA = StructType([
     StructField("matched_shortcut_name", StringType()),
     StructField("matched_shortcut_database", StringType()),
     StructField("shortcut_sk", LongType()),
+    StructField("severity", StringType()),
+    StructField("username", StringType()),
     StructField("dest_table", StringType()),
     StructField("source_column_count", IntegerType()),
     StructField("dest_column_count", IntegerType()),
@@ -595,17 +686,19 @@ FACT_COPY_EVENT_SCHEMA = StructType([
     StructField("is_select_star", BooleanType()),
     StructField("is_shortcut_read_and_saved_as_is", BooleanType()),
     StructField("threshold_pct_at_detection", DoubleType()),
-    StructField("query_start_time", StringType()),
-    StructField("detected_ts", StringType()),
+    StructField("copy_event_starttime", StringType()),
+    StructField("copy_event_detected_time", StringType()),
 ])
 
 try:
     if fact_copy_event_rows:
-        # NOTE: keep query_start_time/detected_ts as StringType (matching FACT_COPY_EVENT_SCHEMA and
-        # the already-persisted Delta table schema from the first empty-table-creation run) - casting
-        # to TimestampType here caused a DELTA_FAILED_TO_MERGE_FIELDS conflict on append.
+        # NOTE: keep copy_event_starttime/copy_event_detected_time as StringType (matching
+        # FACT_COPY_EVENT_SCHEMA and the already-persisted Delta table schema from the first
+        # empty-table-creation run) - casting to TimestampType here caused a
+        # DELTA_FAILED_TO_MERGE_FIELDS conflict on append.
         fact_copy_event_df = spark.createDataFrame(fact_copy_event_rows, schema=FACT_COPY_EVENT_SCHEMA)
-        fact_copy_event_df.write.mode("append").format("delta").option("mergeSchema", "true").saveAsTable("FactCopyEvent")
+        with_delta_conflict_retry(lambda: fact_copy_event_df.write.mode("append").format("delta")
+                                   .option("mergeSchema", "true").saveAsTable("FactCopyEvent"))
         print(f"Appended {fact_copy_event_df.count()} rows to FactCopyEvent.")
         display(fact_copy_event_df)
     else:
@@ -624,7 +717,20 @@ try:
             "of the source columns, even if extra new columns were also added. Incremental: only "
             "processes query-history rows newer than the per-item watermark in CopyEventWatermark."
         )
-        spark.sql(f"ALTER TABLE FactCopyEvent SET TBLPROPERTIES ('comment' = '{table_comment}')")
+        # No single quotes remain in the comment text (Spark SQL string literals do not reliably
+        # support '' escaping like ANSI SQL); strip defensively in case future edits add one -
+        # matches NB_CopyEventDetection_SparkKafka's identical defensive pattern.
+        safe_table_comment = table_comment.replace("'", "")
+        # Only issue the ALTER if the comment actually needs to change: this is a metadata-changing
+        # commit, and FactCopyEvent is a table BOTH this notebook and NB_CopyEventDetection_SparkKafka
+        # write to - running it unconditionally on every single run (as before) made a Delta
+        # MetadataChangedException collision with the sibling notebook's concurrent append far more
+        # likely than it needs to be. Guarding it here means it only actually commits once (or after a
+        # genuine comment-text change), not on every run.
+        current_table_comment = spark.sql("SHOW TBLPROPERTIES FactCopyEvent('comment')").collect()[0]["value"]
+        if current_table_comment != safe_table_comment:
+            with_delta_conflict_retry(lambda: spark.sql(
+                f"ALTER TABLE FactCopyEvent SET TBLPROPERTIES ('comment' = '{safe_table_comment}')"))
         col_comments = {
             "event_id": "Natural key: hosting_item_id + distributed_statement_id from Query Insights.",
             "hosting_workspace_id": "Workspace GUID where the copy statement ran.",
@@ -635,6 +741,7 @@ try:
             "matched_shortcut_name": "Name of the OneLake shortcut the statement read from (matched against DimShortcut).",
             "matched_shortcut_database": "Name of the hosting Lakehouse/Warehouse item where the matched shortcut lives (may differ from hosting_item_name for cross-item copies).",
             "shortcut_sk": "Deterministic BIGINT surrogate key of the matched shortcut (looked up from DimShortcut.shortcut_sk at detection time) - a real, materialized column so Direct Lake relationships can join to DimShortcut on it. NULL if the matched shortcut could not be resolved to a shortcut_sk at detection time.",
+            "username": "Login name of whoever ran the query that produced this copy event (Warehouse: login_name from Query Insights exec_requests_history; SparkKafka: resolved via Fabric Workspace Monitoring ItemJobEventLogs + Microsoft Graph). NULL for historical rows written before this column existed, or if the identity could not be resolved.",
             "dest_table": "Destination table name the SELECT was saved into.",
             "source_column_count": "Total column count of the shortcut source table.",
             "dest_column_count": "Column count actually written to the destination table.",
@@ -643,13 +750,19 @@ try:
             "is_select_star": "TRUE if the statement used SELECT * FROM the shortcut.",
             "is_shortcut_read_and_saved_as_is": "TRUE if is_select_star OR retention_pct > threshold_pct_at_detection - the flag this whole solution exists to raise.",
             "threshold_pct_at_detection": "Configurable retention threshold (config.detection.columnRetentionThresholdPercent) in effect when this row was computed.",
-            "query_start_time": "Start time of the source query, from Query Insights.",
-            "detected_ts": "UTC timestamp this notebook run detected/computed this row.",
+            "copy_event_starttime": "Start time of the source query, from Query Insights.",
+            "copy_event_detected_time": "UTC timestamp this notebook run detected/computed this row.",
         }
-        existing_cols = {f.name for f in spark.table("FactCopyEvent").schema.fields}
+        existing_schema_fields = {f.name: f for f in spark.table("FactCopyEvent").schema.fields}
         for col, comment in col_comments.items():
-            if col in existing_cols:
-                spark.sql(f"ALTER TABLE FactCopyEvent ALTER COLUMN {col} COMMENT '{comment}'")
+            if col in existing_schema_fields:
+                safe_comment = comment.replace("'", "")
+                # Same "only ALTER if actually different" guard as the table comment above, and for
+                # the same reason (FactCopyEvent is a shared table - minimize metadata commits).
+                current_comment = existing_schema_fields[col].metadata.get("comment")
+                if current_comment != safe_comment:
+                    with_delta_conflict_retry(lambda c=col, cm=safe_comment: spark.sql(
+                        f"ALTER TABLE FactCopyEvent ALTER COLUMN {c} COMMENT '{cm}'"))
 except Exception as e:
     log_error_to_lakehouse("write_fact_copy_event", e)
     raise
@@ -674,7 +787,7 @@ try:
     max_ts_by_item = dict(watermark)  # start from existing watermark; only raise it, never lower it
     for row in fact_copy_event_rows:
         item_id = row["hosting_item_id"]
-        candidate_ts = row["query_start_time"]
+        candidate_ts = row["copy_event_starttime"]
         if item_id not in max_ts_by_item or candidate_ts > max_ts_by_item[item_id]:
             max_ts_by_item[item_id] = candidate_ts
 

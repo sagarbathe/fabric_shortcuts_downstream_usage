@@ -4,10 +4,10 @@
   "position": {
     "x": 20.317460317460316,
     "y": 0,
-    "z": 1000,
+    "z": 3000,
     "height": 90.412698412698418,
     "width": 200.12698412698413,
-    "tabOrder": 1000
+    "tabOrder": 3000
   },
   "visual": {
     "visualType": "card",
@@ -127,23 +127,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "189c1e55c1e90c270607",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "DimShortcut"
-              }
-            },
-            "Property": "Total Shortcuts"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

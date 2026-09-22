@@ -10,8 +10,8 @@ dynamic_executor_allocation:
 spark_conf:
   spark.extraListeners: io.openlineage.spark.agent.OpenLineageSparkListener
   spark.openlineage.transport.type: kafka
-  spark.openlineage.transport.topicName: esehbnjzmxu954h0iqynlc_eh
-  spark.openlineage.transport.properties.bootstrap.servers: esehbnjzmxu954h0iqynlc.servicebus.windows.net:9093
+  spark.openlineage.transport.topicName: esehbng88vpo1ej4n3s5du_eh
+  spark.openlineage.transport.properties.bootstrap.servers: esehbng88vpo1ej4n3s5du.servicebus.windows.net:9093
   spark.openlineage.transport.properties.security.protocol: SASL_SSL
   spark.openlineage.transport.properties.sasl.mechanism: PLAIN
   spark.openlineage.transport.properties.key.serializer: org.apache.kafka.common.serialization.StringSerializer

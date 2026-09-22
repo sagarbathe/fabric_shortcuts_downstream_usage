@@ -68,23 +68,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "af5854df4c602704e48d",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "Avg Retention %"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

@@ -4,10 +4,10 @@
   "position": {
     "x": 640,
     "y": 158.47619047619048,
-    "z": 1000,
+    "z": 4000,
     "height": 309.84126984126982,
     "width": 572.952380952381,
-    "tabOrder": 1000
+    "tabOrder": 4000
   },
   "visual": {
     "visualType": "clusteredColumnChart",
@@ -87,51 +87,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "e9f6fe10c8003174a8ad",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactShortcutInventoryDiff"
-              }
-            },
-            "Property": "change_type"
-          }
-        },
-        "type": "Categorical"
-      },
-      {
-        "name": "b38b0e6fc0c5158e17ca",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactShortcutInventoryDiff"
-              }
-            },
-            "Property": "Shortcuts Added"
-          }
-        },
-        "type": "Advanced"
-      },
-      {
-        "name": "a997220e5d1150dd820a",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactShortcutInventoryDiff"
-              }
-            },
-            "Property": "Shortcuts Removed"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

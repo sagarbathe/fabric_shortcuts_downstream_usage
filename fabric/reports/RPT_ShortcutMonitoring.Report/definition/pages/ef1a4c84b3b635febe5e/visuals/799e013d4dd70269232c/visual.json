@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "5c17f46e0d9ac3eadc49",
+  "name": "799e013d4dd70269232c",
   "position": {
-    "x": 135.11111111111111,
-    "y": 0,
-    "z": 0,
-    "height": 238.73015873015873,
-    "width": 699.936507936508,
-    "tabOrder": 0
+    "x": 145.11111111111111,
+    "y": 100,
+    "z": 2000,
+    "height": 230,
+    "width": 460,
+    "tabOrder": 2000
   },
   "visual": {
-    "visualType": "clusteredColumnChart",
+    "visualType": "barChart",
     "query": {
       "queryState": {
         "Category": {
@@ -23,10 +23,10 @@
                       "Entity": "FactCopyEvent"
                     }
                   },
-                  "Property": "copy_event_detected_time"
+                  "Property": "username"
                 }
               },
-              "queryRef": "FactCopyEvent.copy_event_detected_time",
+              "queryRef": "FactCopyEvent.username",
               "active": true
             }
           ]
@@ -63,6 +63,24 @@
             }
           ]
         }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "FactCopyEvent"
+                  }
+                },
+                "Property": "Total Copy Events"
+              }
+            },
+            "direction": "Descending"
+          }
+        ],
+        "isDefaultSort": true
       }
     },
     "visualContainerObjects": {
@@ -79,7 +97,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Copy Events Over Time'"
+                  "Value": "'Copy Events by User'"
                 }
               }
             }

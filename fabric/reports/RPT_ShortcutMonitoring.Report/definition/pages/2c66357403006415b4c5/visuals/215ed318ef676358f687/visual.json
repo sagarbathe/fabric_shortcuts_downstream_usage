@@ -4,10 +4,10 @@
   "position": {
     "x": 459.17460317460319,
     "y": 0,
-    "z": 1000,
+    "z": 0,
     "height": 90.412698412698418,
     "width": 200.12698412698413,
-    "tabOrder": 1000
+    "tabOrder": 0
   },
   "visual": {
     "visualType": "card",
@@ -134,23 +134,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "a2ff8bb94e56b829e382",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactShortcutInventoryDiff"
-              }
-            },
-            "Property": "Net Shortcut Change"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

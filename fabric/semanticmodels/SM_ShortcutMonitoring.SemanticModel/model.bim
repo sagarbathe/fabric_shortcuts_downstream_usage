@@ -161,6 +161,42 @@
             "description": "Path within the source item that the shortcut points to. Two shortcuts sharing this value (and source item) are duplicates, regardless of their own names."
           },
           {
+            "name": "source_external_location",
+            "dataType": "string",
+            "sourceColumn": "source_external_location",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "a4b48144-57e1-4f4e-992f-bccf68abf8a3",
+            "description": "For external (non-OneLake) targets: the target's storage location/endpoint (e.g. ADLS Gen2/Blob storage account URL, S3/GCS bucket URL, Dataverse environment). Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_subpath",
+            "dataType": "string",
+            "sourceColumn": "source_external_subpath",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "51f07baa-ac1c-4607-854f-b3244498ab7d",
+            "description": "For external targets: the subpath/folder/table within the external location. Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_connection_id",
+            "dataType": "string",
+            "sourceColumn": "source_external_connection_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "0d9272ab-7519-4b4c-b1c0-9709423e7403",
+            "description": "For external targets: GUID of the Fabric cloud connection used to reach the external source. Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_details_json",
+            "dataType": "string",
+            "sourceColumn": "source_external_details_json",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "a3e8fbb1-2412-40ee-b0fa-b47b5e3a9681",
+            "description": "For external targets: the full raw target-type sub-object from the Fabric Shortcuts API, as JSON - every field Fabric returns for that target type. Blank for OneLake targets."
+          },
+          {
             "name": "is_internal_onelake",
             "dataType": "boolean",
             "sourceColumn": "is_internal_onelake",
@@ -361,6 +397,42 @@
             "isHidden": false,
             "lineageTag": "c3d1bdfc-6044-4785-92c7-01c2ed694fec",
             "description": "Path within the source item that the shortcut points to."
+          },
+          {
+            "name": "source_external_location",
+            "dataType": "string",
+            "sourceColumn": "source_external_location",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "b4cb78ec-51f4-4aa1-995b-b4ffd9bda78d",
+            "description": "For external targets: the target's storage location/endpoint at the time of this event. Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_subpath",
+            "dataType": "string",
+            "sourceColumn": "source_external_subpath",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "79afd4e8-4f5a-44c1-bcaa-f7897860da9e",
+            "description": "For external targets: the subpath/folder/table within the external location at the time of this event. Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_connection_id",
+            "dataType": "string",
+            "sourceColumn": "source_external_connection_id",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "c60d780b-870c-476f-a3aa-9141a87772c2",
+            "description": "For external targets: GUID of the Fabric cloud connection used to reach the external source at the time of this event. Blank for OneLake targets."
+          },
+          {
+            "name": "source_external_details_json",
+            "dataType": "string",
+            "sourceColumn": "source_external_details_json",
+            "summarizeBy": "none",
+            "isHidden": true,
+            "lineageTag": "9bcb7aa3-a4ea-4432-82c1-a8e9e1c98c03",
+            "description": "For external targets: the full raw target-type sub-object from the Fabric Shortcuts API at the time of this event, as JSON. Blank for OneLake targets."
           },
           {
             "name": "is_internal_onelake",
@@ -607,7 +679,7 @@
           },
           {
             "name": "Duplicate Group Detected At",
-            "expression": "MAXX(FactDuplicateShortcutGroup, DATETIMEVALUE(SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \")))",
+            "expression": "MAXX(FactDuplicateShortcutGroup, VAR t = SUBSTITUTE(LEFT(FactDuplicateShortcutGroup[detected_ts], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
             "lineageTag": "dd020bb8-68c6-4b32-bd47-e8cf20862643",
             "description": "detected_ts parsed into a proper datetime, for use in date slicers/axes.",
             "formatString": "General Date"
@@ -787,22 +859,31 @@
             "formatString": "0.0\"%\""
           },
           {
-            "name": "query_start_time",
+            "name": "copy_event_starttime",
             "dataType": "string",
-            "sourceColumn": "query_start_time",
+            "sourceColumn": "copy_event_starttime",
             "summarizeBy": "none",
             "isHidden": true,
             "lineageTag": "9eea783a-d81c-43c8-b369-77fa7a7ba781",
             "description": "Start time of the source query/write, as text (raw Delta type, kept as STRING to avoid a Delta schema-merge conflict). Use the 'Query Start At' measure for a proper datetime."
           },
           {
-            "name": "detected_ts",
+            "name": "copy_event_detected_time",
             "dataType": "string",
-            "sourceColumn": "detected_ts",
+            "sourceColumn": "copy_event_detected_time",
             "summarizeBy": "none",
             "isHidden": true,
             "lineageTag": "4b4e8f0f-0a1a-4133-9df9-964b38cd9dbe",
             "description": "UTC timestamp this row was detected/computed, as text (raw Delta type). Use the 'Detected At' measure for a proper datetime."
+          },
+          {
+            "name": "username",
+            "dataType": "string",
+            "sourceColumn": "username",
+            "summarizeBy": "none",
+            "isHidden": false,
+            "lineageTag": "5a32f8c8-bf2f-4e4d-8810-62be7fc5c39c",
+            "description": "Identity that executed the copy. Warehouse: login_name from Query Insights. SparkKafka: resolved via Fabric Workspace Monitoring's ItemJobEventLogs (ExecutingPrincipalId, joined on the exact JobInstanceId embedded in the OpenLineage job.name) and Microsoft Graph. Blank for rows written before this column existed (no historical backfill), or if the identity could not be resolved (falls back to the raw AAD object id)."
           }
         ],
         "measures": [
@@ -859,16 +940,16 @@
           },
           {
             "name": "Copy Event Detected At",
-            "expression": "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[detected_ts], 19), \"T\", \" \")))",
+            "expression": "MAXX(FactCopyEvent, VAR t = SUBSTITUTE(LEFT(FactCopyEvent[copy_event_detected_time], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
             "lineageTag": "1fcebdb5-cb58-4c15-9b66-a5aa914cbe12",
-            "description": "detected_ts parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "description": "copy_event_detected_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
             "formatString": "General Date"
           },
           {
             "name": "Query Start At",
-            "expression": "MAXX(FactCopyEvent, DATETIMEVALUE(SUBSTITUTE(LEFT(FactCopyEvent[query_start_time], 19), \"T\", \" \")))",
+            "expression": "MAXX(FactCopyEvent, VAR t = SUBSTITUTE(LEFT(FactCopyEvent[copy_event_starttime], 19), \"T\", \" \") RETURN DATEVALUE(t) + TIMEVALUE(t))",
             "lineageTag": "df034066-9ac5-4ef7-b6f3-0ac302522235",
-            "description": "query_start_time parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
+            "description": "copy_event_starttime parsed into a proper datetime, for use in date slicers/axes/trend visuals.",
             "formatString": "General Date"
           },
           {
@@ -876,6 +957,18 @@
             "expression": "CALCULATE([Total Copy Events], FILTER(FactCopyEvent, [Source Shortcut Exists Now] = FALSE()))",
             "lineageTag": "a43ab170-21b2-4ad8-b890-e0444aa6f4a7",
             "description": "Count of copy events whose source shortcut has since been deleted."
+          },
+          {
+            "name": "Distinct Users",
+            "expression": "DISTINCTCOUNT(FactCopyEvent[username])",
+            "lineageTag": "73013bdb-a0d9-43d3-a7a1-9de7717314ee",
+            "description": "Count of distinct identities that have executed a copy event, in the current filter context. Excludes blank username (rows written before the column existed, or unresolved identities)."
+          },
+          {
+            "name": "Copy Events - Unknown User",
+            "expression": "CALCULATE([Total Copy Events], FactCopyEvent[username] = BLANK())",
+            "lineageTag": "64ed14a2-c1b6-4996-b707-62ec70092257",
+            "description": "Count of copy events with no resolved username - either written before the username column existed, or the identity could not be resolved at detection time."
           }
         ],
         "partitions": [

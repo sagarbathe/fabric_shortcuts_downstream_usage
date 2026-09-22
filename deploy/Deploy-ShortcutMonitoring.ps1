@@ -131,7 +131,7 @@ function Step02-Folders {
         $parentFolderId = Get-OrNew-FabricFolder -WorkspaceId $wsId -Headers $Headers -DisplayName $Config.folders.containerFolderName
         Write-Host "  [OK] container folder '$($Config.folders.containerFolderName)' = $parentFolderId"
     }
-    $folderNames = @("notebooks", "pipelines", "environment", "eventstreams", "semanticmodels", "reports", "dataagents")
+    $folderNames = @("lakehouse", "notebooks", "pipelines", "environment", "eventstreams", "semanticmodels", "reports", "dataagents")
     foreach ($name in $folderNames) {
         $id = Get-OrNew-FabricFolder -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ParentFolderId $parentFolderId
         $State["FOLDER_$($name.ToUpper())"] = $id
@@ -146,6 +146,7 @@ function Step03-Lakehouse {
     $wsId = $State["WORKSPACE_ID"]
     $lhName = $Config.lakehouse.displayName
     $lhId = New-FabricLakehouse -WorkspaceId $wsId -Headers $Headers -DisplayName $lhName
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $lhId -FolderId $State["FOLDER_LAKEHOUSE"]
     $State["LAKEHOUSE_ID"] = $lhId
     Write-Host "  [OK] lakehouse '$lhName' = $lhId"
     Write-Host "  Waiting for SQL analytics endpoint to provision..."
@@ -188,36 +189,118 @@ function Step04-Config {
     return $State
 }
 
-function Step05-Environment {
+function Step05-Eventstream {
     param($Config, $State, $Headers)
-    Write-StepBanner 5 "Environment (ENV_OpenLineage)"
-    $wsId = $State["WORKSPACE_ID"]
-    $name = $Config.environment.displayName
-    $templateDir = Join-Path $FabricDir "environment\$name.Environment"
-    $tokenMap = Get-TokenMap -State $State
-    $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
-    $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $name -Type "Environment"
-    $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ItemType "Environment" -Parts $parts -ExistingItemId $existing.id
-    if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_ENVIRONMENT"] }
-    $State["ENVIRONMENT_ID"] = $itemId
-    Write-Host "  [OK] environment '$name' = $itemId"
-    Write-Warning "  Manual step still required: open the environment in the portal, add/verify the Kafka secret under Public libraries / Spark properties (see README 'Building the ENV_OpenLineage environment'), and Publish it - this cannot be automated via the definition API."
-    return $State
-}
-
-function Step06-Eventstream {
-    param($Config, $State, $Headers)
-    Write-StepBanner 6 "Eventstream (ES_OpenLineageEvents)"
+    Write-StepBanner 5 "Eventstream (ES_OpenLineageEvents)"
     $wsId = $State["WORKSPACE_ID"]
     $name = $Config.eventstream.displayName
+
+    # Raw-capture Eventhouse must exist (with its "accept literally everything" dynamic-column
+    # table) before the Eventstream is published, since the Eventstream's DirectIngestion
+    # destination references it by item id, table name, and mapping rule name.
+    $ehName = $Config.eventhouse.displayName
+    $ehId = Confirm-FabricEventhouseAndRawTable -WorkspaceId $wsId -Headers $Headers -EventhouseName $ehName -KqlTableName "ol_raw_events" -KqlMappingName "ol_raw_events_map"
+    $State["EVENTHOUSE_ID"] = $ehId
+    Write-Host "  [OK] eventhouse '$ehName' = $ehId"
+
     $templateDir = Join-Path $FabricDir "eventstreams\$name.Eventstream"
     $tokenMap = Get-TokenMap -State $State
     $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
     $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $name -Type "Eventstream"
     $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ItemType "Eventstream" -Parts $parts -ExistingItemId $existing.id
-    if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_EVENTSTREAMS"] }
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_EVENTSTREAMS"]
     $State["EVENTSTREAM_ID"] = $itemId
     Write-Host "  [OK] eventstream '$name' = $itemId"
+
+    Write-Host "  Verifying the Eventstream is actually Running (not paused)..."
+    Confirm-FabricEventstreamRunning -WorkspaceId $wsId -Headers $Headers -EventstreamId $itemId
+    return $State
+}
+
+function Step06-Environment {
+    param($Config, $State, $Headers)
+    Write-StepBanner 6 "Environment (ENV_OpenLineage) - deployed into each monitored workspace"
+    $wsId = $State["WORKSPACE_ID"]
+
+    # Eventstream (step 5) must run before this step - we read its CustomEndpoint source's live
+    # Kafka connection details here and bake them straight into every monitored workspace's
+    # Sparkcompute.yml, instead of requiring the Kafka secret to be copy-pasted manually from the
+    # portal N times. The Eventstream itself stays centralized in THIS (the solution's own)
+    # workspace - only the environment/listener config is replicated out to monitored workspaces,
+    # since Fabric environments can only be attached to notebooks in their own workspace, whereas
+    # the Eventstream's Kafka custom endpoint is just a network endpoint any Spark session can
+    # publish to regardless of which workspace it runs in.
+    Write-Host "  Fetching live Kafka connection details from Eventstream '$($Config.eventstream.displayName)'..."
+    $kafkaConn = Get-EventstreamCustomEndpointConnection -WorkspaceId $wsId -Headers $Headers -EventstreamId $State["EVENTSTREAM_ID"]
+    $State["KAFKA_TOPIC_NAME"] = $kafkaConn.eventHubName
+    $State["KAFKA_BOOTSTRAP_SERVERS"] = "$($kafkaConn.fullyQualifiedNamespace):9093"
+    $State["KAFKA_SASL_JAAS_SECRET_PLACEHOLDER"] = "$($kafkaConn.accessKeys.primaryConnectionString)"
+    Write-Host "  [OK] resolved Kafka topic '$($State['KAFKA_TOPIC_NAME'])' on '$($kafkaConn.fullyQualifiedNamespace)' (secret not logged)"
+
+    if (-not $Config.monitoredWorkspaces -or $Config.monitoredWorkspaces.Count -eq 0) {
+        Write-Warning "  config.monitoredWorkspaces is empty - nothing to deploy. Add entries there and re-run this step (-SkipSteps 1,2,3,4,5)."
+        return $State
+    }
+
+    $envName = $Config.environment.displayName
+    $envTemplateDir = Join-Path $FabricDir "environment\$envName.Environment"
+    $nbTemplateDir = Join-Path $FabricDir "notebooks\NB_OpenLineage_Validate.Notebook"
+    if (-not $State["MONITORED_ENVIRONMENTS"] -or -not ($State["MONITORED_ENVIRONMENTS"] -is [hashtable])) {
+        # A reloaded state file deserializes nested objects as PSCustomObject, not hashtable -
+        # indexed assignment below ($State["MONITORED_ENVIRONMENTS"][$mwId] = ...) requires a real
+        # hashtable, so convert/re-seed it here regardless of what shape it came back as.
+        $h = @{}
+        if ($State["MONITORED_ENVIRONMENTS"]) {
+            $State["MONITORED_ENVIRONMENTS"].PSObject.Properties | ForEach-Object { $h[$_.Name] = $_.Value }
+        }
+        $State["MONITORED_ENVIRONMENTS"] = $h
+    }
+
+    foreach ($mw in $Config.monitoredWorkspaces) {
+        $mwId = $mw.workspaceId
+        $mwName = $mw.workspaceName
+        Write-Host ""
+        Write-Host "  --- Monitored workspace '$mwName' ($mwId) ---"
+
+        # Per-iteration token map: same KAFKA_* values as the shared central Eventstream, but
+        # WORKSPACE_ID/WORKSPACE_NAME point at THIS monitored workspace (not the solution's own) -
+        # a local clone so the real $State (used by every later step for the solution's own
+        # workspace) is never mutated.
+        $mwState = $State.Clone()
+        # Captured from the real $State BEFORE the WORKSPACE_ID/WORKSPACE_NAME override below, so
+        # NB_OpenLineage_Validate can still reach back into the solution's own workspace/Lakehouse
+        # (where the shared ol_lineage_events_v3 sink table lives) even while it is deployed here.
+        $mwState["SOLUTION_WORKSPACE_ID"] = $State["WORKSPACE_ID"]
+        $mwState["SOLUTION_LAKEHOUSE_ID"] = $State["LAKEHOUSE_ID"]
+        $mwState["WORKSPACE_ID"] = $mwId
+        $mwState["WORKSPACE_NAME"] = $mwName
+
+        $envTokenMap = Get-TokenMap -State $mwState
+        $envParts = Get-ItemDefinitionParts -TemplateDir $envTemplateDir -TokenMap $envTokenMap
+        $existingEnv = Get-FabricItemByName -WorkspaceId $mwId -Headers $Headers -DisplayName $envName -Type "Environment"
+        $envItemId = Publish-FabricItem -WorkspaceId $mwId -Headers $Headers -DisplayName $envName -ItemType "Environment" -Parts $envParts -ExistingItemId $existingEnv.id
+        Write-Host "  [OK] environment '$envName' = $envItemId"
+        Write-Host "  Publishing environment (applies staged Spark config)..."
+        Publish-FabricEnvironment -WorkspaceId $mwId -Headers $Headers -EnvironmentId $envItemId
+        Write-Host "  [OK] environment published"
+
+        $nbItemId = $null
+        if (Test-Path $nbTemplateDir) {
+            $mwState["ENVIRONMENT_ID"] = $envItemId
+            $nbTokenMap = Get-TokenMap -State $mwState
+            $nbParts = Get-ItemDefinitionParts -TemplateDir $nbTemplateDir -TokenMap $nbTokenMap
+            $existingNb = Get-FabricItemByName -WorkspaceId $mwId -Headers $Headers -DisplayName "NB_OpenLineage_Validate" -Type "Notebook"
+            $nbItemId = Publish-FabricItem -WorkspaceId $mwId -Headers $Headers -DisplayName "NB_OpenLineage_Validate" -ItemType "Notebook" -Parts $nbParts -ExistingItemId $existingNb.id
+            Assert-ItemDefinitionUploaded -WorkspaceId $mwId -Headers $Headers -ItemId $nbItemId -DisplayName "NB_OpenLineage_Validate" -PartPathLike "*notebook-content*"
+            Write-Host "  [OK] notebook 'NB_OpenLineage_Validate' = $nbItemId"
+        }
+
+        $State["MONITORED_ENVIRONMENTS"][$mwId] = @{ workspaceName = $mwName; environmentId = $envItemId; validateNotebookId = $nbItemId }
+
+        Write-Host "  ACTION NEEDED: in '$mwName', attach '$envName' to whichever notebook(s) you want" -ForegroundColor Yellow
+        Write-Host "  monitored (Notebook > Environment dropdown), including 'NB_OpenLineage_Validate' if you" -ForegroundColor Yellow
+        Write-Host "  want to self-test - update its Cell 1 with a real shortcut path in that workspace first." -ForegroundColor Yellow
+    }
     return $State
 }
 
@@ -225,11 +308,14 @@ function Step07-Notebooks {
     param($Config, $State, $Headers)
     Write-StepBanner 7 "Notebooks"
     $wsId = $State["WORKSPACE_ID"]
+    # NB_OpenLineage_Validate is intentionally NOT deployed here - it belongs in each monitored
+    # workspace (deployed by step 6, alongside that workspace's own ENV_OpenLineage), not in the
+    # solution's own workspace, since it exists purely to self-test a monitored workspace's
+    # Spark/Kafka lineage wiring using a real shortcut that lives there.
     $notebooks = @(
         @{ Name = "NB_ShortcutInventory_DuplicateDetection"; TokenKey = "NOTEBOOK_ID_DUPLICATE_DETECTION" },
         @{ Name = "NB_CopyEventDetection_Warehouse"; TokenKey = "NOTEBOOK_ID_WAREHOUSE" },
-        @{ Name = "NB_CopyEventDetection_SparkKafka"; TokenKey = "NOTEBOOK_ID_SPARKKAFKA" },
-        @{ Name = "NB_OpenLineage_Validate"; TokenKey = $null }
+        @{ Name = "NB_CopyEventDetection_SparkKafka"; TokenKey = "NOTEBOOK_ID_SPARKKAFKA" }
     )
     if ($Config.deployOptionalTestNotebook) {
         $notebooks += @{ Name = "NB_OpenLineage_SparkLineageTest"; TokenKey = $null }
@@ -242,10 +328,15 @@ function Step07-Notebooks {
         $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
         $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $nb.Name -Type "Notebook"
         $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $nb.Name -ItemType "Notebook" -Parts $parts -ExistingItemId $existing.id
-        if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_NOTEBOOKS"] }
+        Assert-ItemDefinitionUploaded -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -DisplayName $nb.Name -PartPathLike "*notebook-content*"
+        Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_NOTEBOOKS"]
         if ($nb.TokenKey) { $State[$nb.TokenKey] = $itemId }
         Write-Host "  [OK] notebook '$($nb.Name)' = $itemId"
     }
+
+    Write-Host ""
+    Write-Host "  NOTE: NB_OpenLineage_Validate is deployed per-monitored-workspace by step 6, not here -" -ForegroundColor Yellow
+    Write-Host "  see that step's 'ACTION NEEDED' output for where to attach its environment and run it." -ForegroundColor Yellow
     return $State
 }
 
@@ -259,7 +350,7 @@ function Step08-Pipeline {
     $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
     $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $name -Type "DataPipeline"
     $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ItemType "DataPipeline" -Parts $parts -ExistingItemId $existing.id
-    if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_PIPELINES"] }
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_PIPELINES"]
     $State["PIPELINE_ID"] = $itemId
     Write-Host "  [OK] pipeline '$name' = $itemId"
 
@@ -281,16 +372,44 @@ function Step09-InitialRun {
         Write-Host "  Skipped (config.runInitialPipelineJob=false). NOTE: the semantic model refresh in step 10 will fail until the pipeline has run at least once."
         return $State
     }
+    Write-Host "  Triggering pipeline run..."
     $wsId = $State["WORKSPACE_ID"]
     $pipelineId = $State["PIPELINE_ID"]
-    Write-Host "  Triggering pipeline run..."
     $jobUrl = Start-FabricPipelineRun -WorkspaceId $wsId -Headers $Headers -PipelineId $pipelineId
     Write-Host "  Polling job (this can take several minutes)..."
     $final = Wait-FabricJobInstance -JobInstanceUrl $jobUrl -Headers $Headers
     if ($final.status -ne "Completed") {
-        throw "Initial pipeline run finished with status '$($final.status)'. Check the pipeline run details in the portal before continuing (resume with -SkipSteps up through 9)."
+        $reason = $null
+        if ($final.failureReason) { $reason = $final.failureReason | ConvertTo-Json -Depth 10 -Compress }
+        Write-Host "  Job instance details: $($final | ConvertTo-Json -Depth 10)"
+        throw "Initial pipeline run finished with status '$($final.status)'.$(if ($reason) { " Reason: $reason" }) Check the pipeline run details in the portal (Monitor hub) before continuing (resume with -SkipSteps up through 9)."
     }
     Write-Host "  [OK] initial pipeline run completed"
+
+    # The pipeline job instance reporting "Completed" only means the orchestrator's activities
+    # returned without error - it does NOT guarantee the notebooks actually did real work (e.g. a
+    # notebook silently deployed with stub/corrupted content, or that errors internally but returns
+    # normally, would still show as a completed job). Verify the actual Fact/Dim tables the
+    # notebooks are supposed to seed are present before moving on, since the semantic
+    # model/report/data-agent steps that follow only upload item definitions - they never validate
+    # against real Lakehouse data, so they'd "succeed" even with zero tables.
+    Write-Host "  Verifying expected Fact/Dim tables were actually created..."
+    $expectedTables = @("DimShortcut", "FactShortcutInventoryDiff", "FactDuplicateShortcutGroup")
+    $actualTables = Get-FabricLakehouseTables -WorkspaceId $wsId -Headers $Headers -LakehouseId $State["LAKEHOUSE_ID"]
+    $missing = $expectedTables | Where-Object { $_ -notin $actualTables }
+    if ($missing) {
+        throw "Initial pipeline run reported 'Completed' but the expected table(s) [$($missing -join ', ')] are missing from the Lakehouse (found: [$($actualTables -join ', ')]). The notebooks likely ran with empty/stub content or failed silently - check the notebook job run logs in the portal (Monitor hub) before continuing (resume with -SkipSteps up through 8, then rerun step 9)."
+    }
+    Write-Host "  [OK] confirmed tables present: $($actualTables -join ', ')"
+    $State["STEP9_VERIFIED_TABLES"] = $true
+
+    # Force a SQL analytics endpoint metadata sync right after the pipeline writes/alters tables -
+    # the endpoint's own auto-sync can lag a schema change (e.g. a newly added column) by more than
+    # the 15s pause Step 10 gives it, and Direct Lake (which queries through this same SQL endpoint)
+    # will then fail with "We cannot access the source column ..." even though the Delta log/table
+    # already has the column. Doing this explicitly here removes that race for Step 10/the Report.
+    Write-Host "  Forcing SQL analytics endpoint metadata sync..."
+    Sync-FabricLakehouseSqlEndpoint -WorkspaceId $wsId -Headers $Headers -LakehouseId $State["LAKEHOUSE_ID"]
     return $State
 }
 
@@ -316,13 +435,35 @@ function Step10-SemanticModel {
     $State["SEMANTIC_MODEL_ID"] = $itemId
     Write-Host "  [OK] semantic model '$name' = $itemId"
 
-    Write-Host "  Smoke-testing with a DAX query..."
-    Start-Sleep -Seconds 15   # give Direct Lake framing a moment after creation
+    # Persist the new id to the state file NOW, before the smoke test below - if it throws, the
+    # caller's `$State = & $step.Fn ...` never completes and its own Save-State call never runs,
+    # which would otherwise silently strand the state file pointing at the OLD (just-deleted, or on
+    # a prior run: about-to-be-deleted) semantic model id. That stranding is what broke Step 11
+    # (Report) after a prior recreate-then-smoke-test-failure: it tried to bind the report to a
+    # semantic model id that no longer existed. Existing item ids in $existing were already deleted
+    # above regardless of what happens next, so the new id is the only usable value from this point on.
+    Save-State -WorkspaceId $wsId -State $State
+
+    Write-Host "  Refreshing (framing) the Direct Lake semantic model..."
+    # A Direct Lake model created via the API has no framed data yet - it must be explicitly
+    # refreshed once before it can serve ANY query. A successful refresh is itself the proof the
+    # model is queryable, so it replaces the old DAX-smoke-test step below rather than being
+    # followed by one - that separate query used to misdiagnose the pre-refresh 403 as an ACL-
+    # propagation delay (a symptom that never resolves just by waiting/retrying) instead of what
+    # it really is: the model simply hadn't been refreshed yet.
     try {
-        $result = Invoke-DaxQuery -WorkspaceName $State["WORKSPACE_NAME"] -DatasetId $itemId -Headers $Headers -Dax "EVALUATE ROW(`"n`", COUNTROWS(DimShortcut))"
-        Write-Host "  [OK] DAX smoke test succeeded: $($result.results[0].tables[0].rows | ConvertTo-Json -Compress)"
+        $refreshId = Start-FabricDatasetRefresh -WorkspaceId $wsId -DatasetId $itemId
+        Wait-FabricDatasetRefresh -WorkspaceId $wsId -DatasetId $itemId -RefreshId $refreshId | Out-Null
+        Write-Host "  [OK] semantic model refreshed/framed."
     } catch {
-        Write-Warning "  DAX smoke test failed (this is expected if step 9 was skipped and the Lakehouse tables don't exist yet): $($_.Exception.Message)"
+        if (-not $State["STEP9_VERIFIED_TABLES"]) {
+            Write-Warning "  Dataset refresh failed (expected - step 9's table verification didn't run this invocation, e.g. it was skipped via -SkipSteps or config.runInitialPipelineJob=false, so the Lakehouse tables may not exist yet): $($_.Exception.Message)"
+        } else {
+            # Step 9 already verified the Fact/Dim tables exist by this point, so a refresh failure
+            # here is a real problem (e.g. a bad model definition/relationship) - don't let the run
+            # report "COMPLETE" while masking it as a mere warning.
+            throw "Dataset refresh failed against a Lakehouse that step 9 already confirmed has data - this indicates a real semantic model problem, not a missing-data timing issue: $($_.Exception.Message)"
+        }
     }
     return $State
 }
@@ -338,13 +479,33 @@ function Step11-Report {
     $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
     $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $name -Type "Report"
     $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ItemType "Report" -Parts $parts -ExistingItemId $existing.id
-    if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_REPORTS"] }
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_REPORTS"]
     $State["REPORT_ID"] = $itemId
     Write-Host "  [OK] report '$name' = $itemId"
 
-    $def = Invoke-WebRequest -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items/$itemId/getDefinition" -Headers $Headers -Method Post -UseBasicParsing
-    $defContent = $def.Content | ConvertFrom-Json
-    Write-Host "  [OK] verified getDefinition returns $($defContent.definition.parts.Count) parts (expected $($parts.Count))"
+    # Use Invoke-FabricRequest (not a raw Invoke-WebRequest) so a 202 LRO response is actually
+    # polled to completion before reading the body - a raw call here previously reported a false
+    # "0 parts" every time (the report was in fact deployed correctly; the immediate 202 response
+    # body is empty until the operation finishes), which was misleading and indistinguishable from
+    # a real corrupted-upload failure like the one Assert-ItemDefinitionUploaded now catches for notebooks.
+    $def = Invoke-FabricRequest -Method Post -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items/$itemId/getDefinition" -Headers $Headers
+    $actualParts = $def.Body.definition.parts.Count
+    if ($actualParts -ne $parts.Count) {
+        throw "Report '$name' getDefinition returned $actualParts parts but $($parts.Count) were uploaded - the definition may not have published correctly."
+    }
+    Write-Host "  [OK] verified getDefinition returns $actualParts parts (expected $($parts.Count))"
+
+    Write-Host "  Validating the report actually renders..."
+    # getDefinition above only proves the uploaded JSON parts round-trip correctly - it says nothing
+    # about whether the report is actually bound to a live semantic model and can be opened/rendered.
+    # Confirm-FabricReportRuns checks that via ordinary report-read endpoints (not executeQueries,
+    # which needs a separate tenant setting - see its own comment for why).
+    try {
+        $reportCheck = Confirm-FabricReportRuns -WorkspaceId $wsId -ReportId $itemId -ExpectedDatasetId $State["SEMANTIC_MODEL_ID"]
+        Write-Host "  [OK] report renders: $($reportCheck.PageCount) page(s), bound to dataset $($reportCheck.DatasetId)"
+    } catch {
+        throw "Report '$name' was published but does not appear to render correctly (not bound to a live/queryable semantic model, or has no pages): $($_.Exception.Message)"
+    }
     return $State
 }
 
@@ -359,7 +520,7 @@ function Step12-DataAgent {
     $parts = Get-ItemDefinitionParts -TemplateDir $templateDir -TokenMap $tokenMap
     $existing = Get-FabricItemByName -WorkspaceId $wsId -Headers $Headers -DisplayName $name -Type "DataAgent"
     $itemId = Publish-FabricItem -WorkspaceId $wsId -Headers $Headers -DisplayName $name -ItemType "DataAgent" -Parts $parts -ExistingItemId $existing.id
-    if (-not $existing) { Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_DATAAGENTS"] }
+    Move-FabricItemToFolder -WorkspaceId $wsId -Headers $Headers -ItemId $itemId -FolderId $State["FOLDER_DATAAGENTS"]
     $State["DATA_AGENT_ID"] = $itemId
     Write-Host "  [OK] data agent '$name' = $itemId"
     return $State
@@ -373,8 +534,8 @@ $Steps = @(
     @{ Number = 2; Title = "Folders"; Fn = ${function:Step02-Folders} }
     @{ Number = 3; Title = "Lakehouse"; Fn = ${function:Step03-Lakehouse} }
     @{ Number = 4; Title = "Upload config.json"; Fn = ${function:Step04-Config} }
-    @{ Number = 5; Title = "Environment"; Fn = ${function:Step05-Environment} }
-    @{ Number = 6; Title = "Eventstream"; Fn = ${function:Step06-Eventstream} }
+    @{ Number = 5; Title = "Eventstream"; Fn = ${function:Step05-Eventstream} }
+    @{ Number = 6; Title = "Environment"; Fn = ${function:Step06-Environment} }
     @{ Number = 7; Title = "Notebooks"; Fn = ${function:Step07-Notebooks} }
     @{ Number = 8; Title = "Pipeline"; Fn = ${function:Step08-Pipeline} }
     @{ Number = 9; Title = "Initial pipeline run"; Fn = ${function:Step09-InitialRun} }
@@ -392,9 +553,6 @@ if ($WhatIf) {
     return
 }
 
-$token = Get-FabricToken
-$headers = Get-FabricHeaders -Token $token
-
 # Need a workspace id up front to key the state file - either from config, or (after step 1 on a
 # create-new-workspace run) it will be added to $State and the state file re-keyed/saved then.
 $initialWsId = if ($Config.workspace.id) { $Config.workspace.id } else { "pending" }
@@ -407,6 +565,14 @@ foreach ($step in $Steps) {
         continue
     }
     try {
+        # Re-acquire a fresh token before every step rather than reusing one token for the whole
+        # run - AAD access tokens typically expire after ~60-75 minutes, and long-running steps
+        # (SQL endpoint provisioning, the manual environment-attach step, the initial pipeline run's
+        # multi-minute poll) can easily push a single-token run past that lifetime, causing a 401
+        # partway through. 'az account get-access-token' is fast/cheap (uses the cached refresh
+        # token), so refreshing per step has no meaningful cost.
+        $token = Get-FabricToken
+        $headers = Get-FabricHeaders -Token $token
         $State = & $step.Fn -Config $Config -State $State -Headers $headers
         $wsIdForSave = if ($State["WORKSPACE_ID"]) { $State["WORKSPACE_ID"] } else { $initialWsId }
         Save-State -WorkspaceId $wsIdForSave -State $State

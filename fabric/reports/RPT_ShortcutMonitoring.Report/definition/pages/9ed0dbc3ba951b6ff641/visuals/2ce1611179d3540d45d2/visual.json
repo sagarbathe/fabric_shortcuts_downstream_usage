@@ -154,23 +154,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "3a2a7c228d341001ab3a",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "Total Copy Events"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

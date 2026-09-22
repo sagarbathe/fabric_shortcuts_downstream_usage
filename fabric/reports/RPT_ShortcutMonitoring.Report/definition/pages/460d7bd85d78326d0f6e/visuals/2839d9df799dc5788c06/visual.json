@@ -4,10 +4,10 @@
   "position": {
     "x": 0,
     "y": 0,
-    "z": 1000,
+    "z": 0,
     "height": 90.412698412698418,
     "width": 200.12698412698413,
-    "tabOrder": 1000
+    "tabOrder": 0
   },
   "visual": {
     "visualType": "card",
@@ -134,23 +134,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "dd6bf72d2a4557a69660",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactDuplicateShortcutGroup"
-              }
-            },
-            "Property": "Duplicate Groups"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

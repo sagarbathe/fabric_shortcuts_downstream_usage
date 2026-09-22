@@ -12,6 +12,7 @@
   "lakehouse": { "displayName": "LH_ShortcutMonitoring" },
   "environment": { "displayName": "ENV_OpenLineage" },
   "eventstream": { "displayName": "ES_OpenLineageEvents" },
+  "eventhouse": { "displayName": "EH_ShortcutMonitoring" },
 
   "monitoredWorkspaces": [
     { "workspaceName": "WS_Example01", "workspaceId": "00000000-0000-0000-0000-000000000001" }

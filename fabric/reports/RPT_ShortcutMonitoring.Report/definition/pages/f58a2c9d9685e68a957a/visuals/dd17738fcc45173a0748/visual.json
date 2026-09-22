@@ -4,10 +4,10 @@
   "position": {
     "x": 0,
     "y": 0,
-    "z": 1000,
+    "z": 3000,
     "height": 720.25396825396831,
     "width": 135.11111111111111,
-    "tabOrder": 1000
+    "tabOrder": 3000
   },
   "visual": {
     "visualType": "slicer",
@@ -68,23 +68,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "3f4c0e080b1b5e15ccd6",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "engine"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "2ff8ce59eace6acf0b7e",
+  "name": "b853acc7000887b8768e",
   "position": {
-    "x": 246.85714285714286,
+    "x": 365.11111111111111,
     "y": 0,
     "z": 1000,
     "height": 90.412698412698418,
@@ -20,13 +20,13 @@
                 "Measure": {
                   "Expression": {
                     "SourceRef": {
-                      "Entity": "DimShortcut"
+                      "Entity": "FactCopyEvent"
                     }
                   },
-                  "Property": "Internal OneLake Shortcuts"
+                  "Property": "Copy Events - Unknown User"
                 }
               },
-              "queryRef": "DimShortcut.Internal OneLake Shortcuts",
+              "queryRef": "FactCopyEvent.Copy Events - Unknown User",
               "active": true
             }
           ]
@@ -34,19 +34,6 @@
       }
     },
     "objects": {
-      "labels": [
-        {
-          "properties": {
-            "fontSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "25D"
-                }
-              }
-            }
-          }
-        }
-      ],
       "categoryLabels": [
         {
           "properties": {
@@ -54,6 +41,19 @@
               "expr": {
                 "Literal": {
                   "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "labels": [
+        {
+          "properties": {
+            "fontSize": {
+              "expr": {
+                "Literal": {
+                  "Value": "25D"
                 }
               }
             }
@@ -75,7 +75,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Internal OneLake Shortcuts'"
+                  "Value": "'Unknown-User Events'"
                 }
               }
             },
@@ -83,6 +83,24 @@
               "expr": {
                 "Literal": {
                   "Value": "'center'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "color": {
+              "solid": {
+                "color": {
+                  "expr": {
+                    "ThemeDataColor": {
+                      "ColorId": 2,
+                      "Percent": 0.6
+                    }
+                  }
                 }
               }
             }
@@ -109,24 +127,6 @@
               "expr": {
                 "Literal": {
                   "Value": "true"
-                }
-              }
-            }
-          }
-        }
-      ],
-      "background": [
-        {
-          "properties": {
-            "color": {
-              "solid": {
-                "color": {
-                  "expr": {
-                    "ThemeDataColor": {
-                      "ColorId": 2,
-                      "Percent": 0.6
-                    }
-                  }
                 }
               }
             }

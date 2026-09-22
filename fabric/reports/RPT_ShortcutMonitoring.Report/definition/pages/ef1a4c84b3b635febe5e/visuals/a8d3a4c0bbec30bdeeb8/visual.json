@@ -1,16 +1,16 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.12.0/schema.json",
-  "name": "5c17f46e0d9ac3eadc49",
+  "name": "a8d3a4c0bbec30bdeeb8",
   "position": {
-    "x": 135.11111111111111,
-    "y": 0,
-    "z": 0,
-    "height": 238.73015873015873,
-    "width": 699.936507936508,
-    "tabOrder": 0
+    "x": 615.11111111111111,
+    "y": 100,
+    "z": 2500,
+    "height": 230,
+    "width": 665,
+    "tabOrder": 2500
   },
   "visual": {
-    "visualType": "clusteredColumnChart",
+    "visualType": "lineChart",
     "query": {
       "queryState": {
         "Category": {
@@ -31,6 +31,24 @@
             }
           ]
         },
+        "Series": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactCopyEvent"
+                    }
+                  },
+                  "Property": "username"
+                }
+              },
+              "queryRef": "FactCopyEvent.username",
+              "active": true
+            }
+          ]
+        },
         "Y": {
           "projections": [
             {
@@ -45,20 +63,6 @@
                 }
               },
               "queryRef": "FactCopyEvent.Total Copy Events",
-              "active": true
-            },
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "FactCopyEvent"
-                    }
-                  },
-                  "Property": "Flagged Copy Events"
-                }
-              },
-              "queryRef": "FactCopyEvent.Flagged Copy Events",
               "active": true
             }
           ]
@@ -79,7 +83,7 @@
             "text": {
               "expr": {
                 "Literal": {
-                  "Value": "'Copy Events Over Time'"
+                  "Value": "'Copy Events Over Time by User'"
                 }
               }
             }

@@ -201,6 +201,24 @@ def enumerate_shortcuts(token, monitored_workspaces):
                 onelake = target.get("oneLake", {}) if target_type == "OneLake" else {}
                 src_ws_id = onelake.get("workspaceId")
                 src_item_id = onelake.get("itemId")
+
+                # For external (non-OneLake) targets, the Fabric shortcuts API nests target-specific
+                # fields under a key matching the target type with a lowercase first letter (e.g.
+                # target_type "AdlsGen2" -> target["adlsGen2"], "AmazonS3" -> target["amazonS3"]).
+                # Field names vary per external type (location/subpath/connectionId for
+                # ADLS/S3/Blob/GCS/S3-compatible; environment/table for Dataverse, etc.) - rather than
+                # hardcoding every type's exact field names (and silently missing new ones Fabric adds
+                # later), pull out the handful of common field-name variants AND keep the full raw
+                # sub-object as JSON so no external source detail is ever lost.
+                ext = {}
+                if target_type and target_type != "OneLake":
+                    ext_key = target_type[0].lower() + target_type[1:]
+                    ext = target.get(ext_key, {}) or {}
+                ext_location = ext.get("location") or ext.get("endpoint") or ext.get("environmentDomain") or ext.get("environment")
+                ext_subpath = ext.get("subpath") or ext.get("table") or ext.get("tableName") or ext.get("bucket")
+                ext_connection_id = ext.get("connectionId")
+                ext_details_json = json.dumps(ext) if ext else None
+
                 shortcut_key = f"{ws_id}|{item_id}|{sc.get('path')}|{sc.get('name')}"
                 rows.append({
                     "shortcut_key": shortcut_key,
@@ -215,6 +233,10 @@ def enumerate_shortcuts(token, monitored_workspaces):
                     "source_workspace_id": src_ws_id,
                     "source_item_id": src_item_id,
                     "source_path": onelake.get("path"),
+                    "source_external_location": ext_location,
+                    "source_external_subpath": ext_subpath,
+                    "source_external_connection_id": ext_connection_id,
+                    "source_external_details_json": ext_details_json,
                     "is_internal_onelake": target_type == "OneLake",
                     "snapshot_ts": snapshot_ts,
                 })
@@ -260,6 +282,10 @@ schema = StructType([
     StructField("source_item_id", StringType()),
     StructField("source_item_name", StringType()),
     StructField("source_path", StringType()),
+    StructField("source_external_location", StringType()),
+    StructField("source_external_subpath", StringType()),
+    StructField("source_external_connection_id", StringType()),
+    StructField("source_external_details_json", StringType()),
     StructField("is_internal_onelake", BooleanType()),
     StructField("snapshot_ts", StringType()),
 ])
@@ -319,11 +345,28 @@ try:
             .withColumn("change_type", F.lit("removed"))
         )
 
+    # Explicit schema-migration guard: FactShortcutInventoryDiff is append-only and only gets a
+    # mergeSchema write when diff_parts is non-empty (an actual new/removed row this run). That means
+    # a run with zero inventory changes would silently leave a pre-existing table missing any newly
+    # added columns (unlike DimShortcut, which unconditionally overwrites its full schema every run).
+    # Ensure the physical table always has these columns before the semantic model (which references
+    # them unconditionally in model.bim) is ever pointed at it - otherwise Direct Lake refresh fails
+    # with "We cannot access the source column ... Either the source column does not exist...".
+    if spark.catalog.tableExists("FactShortcutInventoryDiff"):
+        existing_diff_cols = {f.name for f in spark.table("FactShortcutInventoryDiff").schema.fields}
+        for new_col in ("source_external_location", "source_external_subpath", "source_external_connection_id", "source_external_details_json"):
+            if new_col not in existing_diff_cols:
+                spark.sql(f"ALTER TABLE FactShortcutInventoryDiff ADD COLUMNS ({new_col} STRING)")
+                print(f"Migrated FactShortcutInventoryDiff: added missing column '{new_col}'.")
+
     diff_row_count = 0
     if diff_parts:
         diff_df = diff_parts[0]
         for part in diff_parts[1:]:
-            diff_df = diff_df.unionByName(part)
+            # allowMissingColumns handles the one-time schema migration where "removed" rows come from
+            # a pre-existing DimShortcut snapshot written before the source_external_* columns existed -
+            # missing columns are filled with nulls rather than raising an AnalysisException.
+            diff_df = diff_df.unionByName(part, allowMissingColumns=True)
         diff_df = diff_df.select(
             "shortcut_sk", "shortcut_key", "change_type",
             "shortcut_name",
@@ -332,6 +375,8 @@ try:
             "shortcut_path", "target_type",
             "source_workspace_id", "source_workspace_name",
             "source_item_id", "source_item_name", "source_path",
+            "source_external_location", "source_external_subpath",
+            "source_external_connection_id", "source_external_details_json",
             "is_internal_onelake", "snapshot_ts",
         )
         diff_row_count = diff_df.count()
@@ -526,7 +571,11 @@ COLUMN_COMMENTS = {
         "source_workspace_name": "Display name of source_workspace_id, resolved at scan time.",
         "source_item_id": "For OneLake targets: item GUID the shortcut points to (its source Lakehouse/Warehouse/KQL DB).",
         "source_item_name": "Display name of source_item_id.",
-        "source_path": "Path within the source item that the shortcut points to (excludes the shortcut own name, by design, so two shortcuts with different names to the same path are still recognized as duplicates).",
+        "source_path": "Path within the source item that the shortcut points to (excludes the shortcut own name, by design, so two shortcuts with different names to the same path are still recognized as duplicates). OneLake targets only - null for external targets (see source_external_* columns instead).",
+        "source_external_location": "For external (non-OneLake) targets: the target's storage location/endpoint (e.g. ADLS Gen2/Blob storage account URL, S3/GCS bucket URL, Dataverse environment). Null for OneLake targets.",
+        "source_external_subpath": "For external targets: the subpath/folder/table within the external location (e.g. container/folder, or Dataverse table name). Null for OneLake targets.",
+        "source_external_connection_id": "For external targets: GUID of the Fabric cloud connection used to reach the external source. Null for OneLake targets.",
+        "source_external_details_json": "For external targets: the full raw target-type sub-object from the Fabric Shortcuts API, as JSON - captures every field Fabric returns for that target type (including any not broken out into source_external_location/subpath/connection_id above). Null for OneLake targets.",
         "is_internal_onelake": "True if target_type = OneLake (i.e. this shortcut is eligible for duplicate-shortcut detection); false for external targets.",
         "snapshot_ts": "UTC timestamp of the scan run that produced this row.",
     },
@@ -546,7 +595,11 @@ COLUMN_COMMENTS = {
         "source_workspace_name": "Display name of source_workspace_id.",
         "source_item_id": "For OneLake targets: source item GUID.",
         "source_item_name": "Display name of source_item_id.",
-        "source_path": "Path within the source item that the shortcut points to.",
+        "source_path": "Path within the source item that the shortcut points to. OneLake targets only - null for external targets (see source_external_* columns instead).",
+        "source_external_location": "For external targets: the target's storage location/endpoint at the time of this event. Null for OneLake targets.",
+        "source_external_subpath": "For external targets: the subpath/folder/table within the external location at the time of this event. Null for OneLake targets.",
+        "source_external_connection_id": "For external targets: GUID of the Fabric cloud connection used to reach the external source at the time of this event. Null for OneLake targets.",
+        "source_external_details_json": "For external targets: the full raw target-type sub-object from the Fabric Shortcuts API at the time of this event, as JSON. Null for OneLake targets.",
         "is_internal_onelake": "True if this was an internal OneLake shortcut (duplicate-detection eligible).",
         "snapshot_ts": "UTC timestamp of the scan run in which this change was detected.",
     },
@@ -572,9 +625,15 @@ COLUMN_COMMENTS = {
 }
 
 try:
+    # Spark SQL's string-literal grammar escapes embedded quotes with a backslash (\'), not the
+    # ANSI-SQL doubled-quote ('') style - using '' here causes a PARSE_SYNTAX_ERROR (Spark treats
+    # the first ' as closing the literal and chokes on the remainder as "extra input").
+    def _sql_escape(text):
+        return text.replace("\\", "\\\\").replace("'", "\\'")
+
     for tbl, comment in TABLE_COMMENTS.items():
         if spark.catalog.tableExists(tbl):
-            escaped = comment.replace("'", "''")
+            escaped = _sql_escape(comment)
             # Note: "COMMENT ON TABLE" is Unity-Catalog/Databricks-SQL syntax and is NOT supported by
             # Fabric's Spark SQL for managed Lakehouse tables - use TBLPROPERTIES instead, which works
             # for both Hive-style and Delta tables and is what powers the description shown in the UI.
@@ -585,7 +644,7 @@ try:
             existing_cols = {f.name for f in spark.table(tbl).schema.fields}
             for col, comment in cols.items():
                 if col in existing_cols:
-                    escaped = comment.replace("'", "''")
+                    escaped = _sql_escape(comment)
                     spark.sql(f"ALTER TABLE {tbl} ALTER COLUMN {col} COMMENT '{escaped}'")
 
     print("Table and column descriptions applied.")

@@ -603,7 +603,7 @@ All tables live in a single Lakehouse, **`LH_ShortcutMonitoring`**, in workspace
 | **`DimShortcut`** | one row per currently-existing shortcut | `NB_ShortcutInventory_DuplicateDetection` (full-overwrite each run, idempotent) | The ground-truth shortcut inventory across all monitored workspaces: `shortcut_sk` (deterministic BIGINT surrogate key, `xxhash64` of the natural key), `shortcut_name`, `hosting_workspace_id/name`, `hosting_item_id/name/type`, `shortcut_path`, `source_workspace_id/name`, `source_item_id/name`, `source_path`, `is_internal_onelake`, `snapshot_ts`. **Used by both copy-event detection notebooks** as the cross-reference lookup: the Warehouse notebook matches a parsed SQL statement's source table name against `DimShortcut` (keyed by `hosting_workspace_id` + `hosting_item_name`, spanning both Lakehouse- and Warehouse-hosted shortcuts); the Spark notebook matches an OpenLineage input dataset's real OneLake path against `DimShortcut` (keyed by `hosting_workspace_name` + `hosting_item_name` + `shortcut_name`, since OpenLineage reports the physical path, not the shortcut's display name, but the path's trailing segment is the shortcut name). |
 | **`FactShortcutInventoryDiff`** | one row per inventory diff run × shortcut that changed | Same notebook, append-only | Control-plane change history: `change_type` ∈ {new, removed, target_changed}. Answers "when was this shortcut created/deleted." **Used** by `vw_FactCopyEvent_SourceStatus` (below) to enrich `FactCopyEvent` rows whose source shortcut has since been deleted, and as a fallback lookup (alongside current `DimShortcut`) when backfilling `matched_shortcut_database` on historical `FactCopyEvent` rows. |
 | **`FactDuplicateShortcutGroup`** | one row per shortcut, tagged with its duplicate group | Same notebook | Two-pass duplicate detection per §1.1a (High = same hosting item, Medium = same workspace/different item). **Not consumed** by either copy-event detection notebook — purely a control-plane governance signal, surfaced on its own in the (not-yet-built) Power BI report. |
-| **`FactCopyEvent`** | one row per detected copy event (one job/statement × one matched shortcut × one destination) | **Both** `NB_CopyEventDetection_Warehouse` (`engine='Warehouse'`, append) and `NB_CopyEventDetection_Spark` (`engine='Spark'`, append) — **shared table, not duplicated per engine** | The core fact table this whole solution exists to populate: `event_id`, `hosting_workspace_id/name`, `hosting_item_id/name`, `engine`, `matched_shortcut_name`, `matched_shortcut_database` (the shortcut's hosting item name — may differ from `hosting_item_name` for cross-item copies), `dest_table`, `source_column_count`, `dest_column_count`, `retained_column_count`, `retention_pct`, `is_select_star`, `is_shortcut_read_and_saved_as_is`, `threshold_pct_at_detection`, `query_start_time`, `detected_ts`. Both engines write the identical schema so downstream reporting/Data Agent queries never need to special-case engine type except to filter/group by it. |
+| **`FactCopyEvent`** | one row per detected copy event (one job/statement × one matched shortcut × one destination) | **Both** `NB_CopyEventDetection_Warehouse` (`engine='Warehouse'`, append) and `NB_CopyEventDetection_Spark` (`engine='Spark'`, append) — **shared table, not duplicated per engine** | The core fact table this whole solution exists to populate: `event_id`, `hosting_workspace_id/name`, `hosting_item_id/name`, `engine`, `matched_shortcut_name`, `matched_shortcut_database` (the shortcut's hosting item name — may differ from `hosting_item_name` for cross-item copies), `dest_table`, `source_column_count`, `dest_column_count`, `retained_column_count`, `retention_pct`, `is_select_star`, `is_shortcut_read_and_saved_as_is`, `threshold_pct_at_detection`, `copy_event_starttime`, `copy_event_detected_time`. Both engines write the identical schema so downstream reporting/Data Agent queries never need to special-case engine type except to filter/group by it. |
 | **`CopyEventWatermark`** | one row per Warehouse item | `NB_CopyEventDetection_Warehouse` only | Incremental watermark for the Warehouse engine: `item_id -> last_processed_start_time` (a Query Insights `start_time` value). Ensures each run only scans NEW query-history rows per warehouse (pushed down into the `WHERE start_time > ...` SQL clause, not filtered client-side) — never a full rescan. Advances only past rows that were actually written to `FactCopyEvent`, so a row that fails parsing/matching is retried next run rather than silently lost. |
 | **`SparkLineageWatermark`** | one row per lineage NDJSON file | `NB_CopyEventDetection_Spark` only | Incremental watermark for the Spark engine: `file_path -> last_processed_byte_offset`. Ensures each run only reads the bytes appended to a lineage file since the last run (via an OneLake DFS HTTP `Range` request), not the whole file — never a full rescan. Only advances past complete, successfully-read lines; a trailing partial line (file still being written) is re-read next run. |
 | **`vw_FactCopyEvent_SourceStatus`** (view, not a table) | derived, recomputed on every query | Built once by `NB_CopyEventDetection_Warehouse`, but reflects rows from BOTH engines automatically since it selects over `FactCopyEvent` | Enriches every `FactCopyEvent` row with `source_shortcut_exists_now` (bool) and `source_removed_ts`, by joining current `DimShortcut` and `FactShortcutInventoryDiff`'s most recent `removed` event for that shortcut. Zero incremental-processing cost (plain SQL view); this is how the solution answers "does this copy event's source shortcut still exist, and if not, when was it deleted" for reporting, without needing a dedicated reconciliation pipeline. |
@@ -816,15 +816,16 @@ summary and its JSON report artifact.
 
 ```
 event_id                        STRING   -- Warehouse: {item_id}|{distributed_statement_id}
-                                          -- Spark:     {lineage_file_path}|{openlineage_run_id}
+                                          -- SparkKafka: {lineage_file_path}|{openlineage_run_id}-style, unique per engine
 hosting_workspace_id             STRING
 hosting_workspace_name           STRING
-hosting_item_id                  STRING   -- NULL for Spark rows (no stable per-run item GUID)
+hosting_item_id                  STRING   -- Warehouse item GUID, or notebook item GUID for SparkKafka
 hosting_item_name                STRING   -- Warehouse: the Warehouse item name
-                                          -- Spark:     the monitored notebook's name
-engine                           STRING   -- 'Warehouse' | 'Spark'
+                                          -- SparkKafka: the monitored notebook's name
+engine                           STRING   -- 'Warehouse' | 'SparkKafka'
 matched_shortcut_name            STRING
 matched_shortcut_database        STRING   -- the shortcut's hosting item name (may differ from hosting_item_name for cross-item copies)
+shortcut_sk                      BIGINT   -- surrogate key join to DimShortcut (Direct Lake relationship key; migrated in later)
 dest_table                       STRING
 source_column_count              INT
 dest_column_count                INT
@@ -833,9 +834,17 @@ retention_pct                    DOUBLE
 is_select_star                   BOOLEAN
 is_shortcut_read_and_saved_as_is BOOLEAN
 threshold_pct_at_detection       DOUBLE
-query_start_time                 STRING   -- kept as STRING (not TIMESTAMP) to avoid a Delta schema-merge conflict encountered during implementation
-detected_ts                      STRING
+copy_event_starttime             STRING   -- kept as STRING (not TIMESTAMP) to avoid a Delta schema-merge conflict encountered during implementation
+copy_event_detected_time         STRING
+username                         STRING   -- added later; see §13.8. Warehouse: login_name from Query Insights.
+                                          -- SparkKafka: Graph-resolved principal via JobInstanceId correlation. NULL for
+                                          -- rows written before this column existed (no historical backfill).
 ```
+
+`shortcut_sk` and `username` were both added after the table's initial creation via idempotent
+`ALTER TABLE ... ADD COLUMNS` migration guards in both copy-event notebooks (checked via
+`spark.catalog.tableExists`/schema inspection before altering) — existing deployments upgrade in
+place on their next run, no manual DDL required.
 
 ### 13.7 Open items / next steps (as of this document's last update)
 
@@ -859,9 +868,52 @@ detected_ts                      STRING
   with an active check against Fabric's session/Livy API to confirm the monitored notebook's Spark
   session has actually ended before deleting/archiving its lineage file.
 
----
+### 13.8 Later additions: `username` identification, concurrency hardening, and analytics-layer updates
 
-## 14. Alternate Approach Considered But Not Implemented: OneLake Diagnostics + Delta History Correlation
+The items in §13.7 above were largely completed in later sessions; this subsection records what was
+actually built for each, since the file transport/`ol_lineage_file` architecture described in
+§13.2–§13.6 was itself superseded by a Kafka/Eventstream-based transport (`ES_OpenLineageEvents` →
+`ol_raw_events` KQL table → `ol_raw_kafka_staging` → `ol_lineage_events_v3` Delta table — see the
+Data Dictionary's watermark-tables section for the three independent watermarks governing this
+pipeline's stages), which is why the engine is now named `SparkKafka` rather than `Spark`.
+
+- **`FactCopyEvent.username`** — added so both engines record *who* executed the copy, not just
+  *what* was copied:
+  - **Warehouse:** trivial — `queryinsights.exec_requests_history` already exposes `login_name`,
+    added straight to the existing SELECT.
+  - **SparkKafka:** OpenLineage itself carries no user identity. The solution instead exploits an
+    undocumented but empirically-verified behavior: the OpenLineage `job.name` field embeds the
+    exact Fabric `JobInstanceId` of the notebook run that produced it (dashes stripped from both the
+    notebook-name prefix and the GUID, then reinserted at GUID positions in the remaining hex). That
+    exact GUID is joined — not a time-window heuristic — against the monitored workspace's
+    auto-provisioned **Monitoring KQL database** (`ItemJobEventLogs.ExecutingPrincipalId`, part of
+    [Fabric Workspace Monitoring](https://learn.microsoft.com/en-us/fabric/fundamentals/enable-workspace-monitoring)),
+    and the resulting AAD object id is resolved to a friendly UPN/display name via a Microsoft Graph
+    `directoryObjects/{id}` call (client-credentials flow, reusing the same SP already used for
+    the workspace/Warehouse permissions — Graph is not a supported `notebookutils.credentials.getToken()`
+    audience, so this is a manual OAuth2 token request). Falls back to the raw AAD object id if Graph
+    resolution fails; leaves `username` NULL only if the `JobInstanceId` correlation itself finds no
+    match. No historical backfill — rows written before this column existed remain NULL permanently.
+- **Delta concurrency hardening** — `FactCopyEvent` is a single table written by both notebooks, and
+  their `ALTER TABLE ... SET TBLPROPERTIES`/`ALTER COLUMN ... COMMENT` metadata statements were
+  previously unconditional on every run, which under Delta's serializable isolation invalidates any
+  concurrent in-flight append even though the ALTER is metadata-only. Fixed by (a) making every such
+  ALTER conditional on the stored value actually differing from the desired one, cutting their
+  frequency to near-zero after the first run, and (b) adding a generic `with_delta_conflict_retry()`
+  helper (retries on `ConcurrentAppendException`/`MetadataChangedException`/etc. with backoff,
+  re-raises everything else) as a safety net around the main `FactCopyEvent` append and both
+  migration-guard ALTERs in each notebook.
+- **SQL-comment robustness** — column/table COMMENT text is defensively stripped of single quotes
+  (`.replace("'", "")`) before being interpolated into an f-string ALTER statement, since Spark SQL
+  does not reliably support `''`-style escaping the way ANSI SQL does; one apostrophe in a `username`
+  column comment briefly broke a deployment before this was applied consistently to both notebooks.
+- **Analytics layer** — `SM_ShortcutMonitoring.SemanticModel` gained the `username` column plus two
+  new measures (`Distinct Users`, `Copy Events - Unknown User`); `RPT_ShortcutMonitoring.Report`
+  gained a 5th page, **User Analysis** (user slicer, the two new KPI cards, a "Copy Events by User"
+  bar chart, a "Copy Events Over Time by User" trend chart with a per-user legend, and a detail
+  table), built to match the existing pages' visual/formatting conventions.
+
+---
 
 The following design was researched as an alternative path to Spark-engine detection (an alternative
 to OpenLineage, §13.4) using OneLake's built-in diagnostic logging instead of a Spark listener. It was

@@ -4,10 +4,10 @@
   "position": {
     "x": 219.42857142857142,
     "y": 0,
-    "z": 1000,
+    "z": 7000,
     "height": 84.317460317460316,
     "width": 200.12698412698413,
-    "tabOrder": 1000
+    "tabOrder": 7000
   },
   "visual": {
     "visualType": "card",
@@ -158,23 +158,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "9089bdadc89ab9087b33",
-        "field": {
-          "Measure": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactCopyEvent"
-              }
-            },
-            "Property": "Flagged Copy Events"
-          }
-        },
-        "type": "Advanced"
-      }
-    ]
   }
 }

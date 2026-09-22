@@ -165,8 +165,9 @@ engine.** This is the core fact table the whole solution exists to populate.
 | `is_select_star` | `BOOLEAN` | TRUE if the statement used `SELECT *` from the shortcut (Warehouse engine) / retained all columns (Spark/Kafka engine). |
 | `is_shortcut_read_and_saved_as_is` | `BOOLEAN` | TRUE if `is_select_star` OR `retention_pct > threshold_pct_at_detection` — the flag this whole solution exists to raise. |
 | `threshold_pct_at_detection` | `DOUBLE` | Configurable retention threshold (`config.detection.columnRetentionThresholdPercent`) in effect when this row was computed. |
-| `query_start_time` | `STRING` | Start time of the source query/write (kept as STRING, not TIMESTAMP, to avoid a Delta schema-merge conflict encountered during implementation). |
-| `detected_ts` | `STRING` | UTC timestamp this notebook run detected/computed this row. |
+| `copy_event_starttime` | `STRING` | Start time of the source query/write (kept as STRING, not TIMESTAMP, to avoid a Delta schema-merge conflict encountered during implementation). |
+| `copy_event_detected_time` | `STRING` | UTC timestamp this notebook run detected/computed this row. |
+| `username` | `STRING` | Identity that executed the copy. Warehouse: `login_name` from `queryinsights.exec_requests_history` (no extra correlation needed). SparkKafka: resolved by joining the exact `JobInstanceId` embedded in the OpenLineage `job.name` against the monitored workspace's Monitoring KQL database `ItemJobEventLogs.ExecutingPrincipalId`, then resolving that AAD object id to a friendly UPN/display name via Microsoft Graph `directoryObjects/{id}` (falls back to the raw AAD object id if Graph resolution fails or lacks permission). NULL for rows written before this column existed (no historical backfill) or if the SparkKafka correlation itself could not find a match (e.g. Monitoring KQL DB unreachable, or the job.name pattern didn't yield a matching `JobInstanceId`). |
 
 ---
 
@@ -202,7 +203,9 @@ not analytical data — excluded from the semantic model and reports.
 | Table | Grain | Columns | Purpose |
 |---|---|---|---|
 | `CopyEventWatermark` | one row per Warehouse item | `item_id STRING`, `last_processed_start_time STRING` | Incremental watermark for the Warehouse engine — the last Query Insights `start_time` processed per Warehouse item. Ensures each run only scans NEW query-history rows (pushed into the SQL `WHERE` clause), never a full rescan. |
-| `SparkKafkaLineageWatermark` | single row (shared across all monitored notebooks) | `last_processed_enqueued_time TIMESTAMP` | Incremental watermark for the Spark/Kafka engine — max `EventEnqueuedUtcTime` already processed from `ol_lineage_events_v3`. Ensures each run only reads newly-appended rows. |
+| `RawCaptureKqlWatermark` | single row | `last_ingest_ts` | Watermark for the raw-capture step that pulls already-landed OpenLineage events out of the solution's own Eventhouse KQL database (`ol_raw_events`, populated by the Eventstream's Eventhouse DirectIngestion destination) via the Kusto REST query API. Keyed on Kusto's own `ingestion_time()` (monotonic, immune to Kafka-side offset/retention semantics) rather than the event's own `eventTime`. Advances independently of `RawCaptureWatermark` below — this one governs "how far into `ol_raw_events` have we read," not "how far into staging have we synced." |
+| `RawCaptureWatermark` | single row | `last_processed_event_time` | Watermark for the step that syncs newly-captured rows from the schema-free `ol_raw_kafka_staging` table into `ol_lineage_events_v3`, keyed on the staging table's `kafka_timestamp`. Deliberately a separate watermark from `RawCaptureKqlWatermark` and `SparkKafkaLineageWatermark` — all three advance independently because each governs a different stage of the same pipeline (KQL→staging, staging→`ol_lineage_events_v3`, `ol_lineage_events_v3`→`FactCopyEvent`), so a failure/retry at one stage cannot silently skip or double-process rows at another. |
+| `SparkKafkaLineageWatermark` | single row (shared across all monitored notebooks) | `last_processed_enqueued_time TIMESTAMP` | Incremental watermark for the Spark/Kafka engine's detection step — max `EventEnqueuedUtcTime` already processed from `ol_lineage_events_v3`. Ensures each run only reads newly-appended rows. |
 
 ---
 

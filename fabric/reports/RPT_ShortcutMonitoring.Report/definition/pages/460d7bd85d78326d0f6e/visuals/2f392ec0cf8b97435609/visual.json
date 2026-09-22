@@ -62,23 +62,5 @@
         }
       ]
     }
-  },
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "aa088b9edb075a42a099",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "FactDuplicateShortcutGroup"
-              }
-            },
-            "Property": "severity"
-          }
-        },
-        "type": "Categorical"
-      }
-    ]
   }
 }

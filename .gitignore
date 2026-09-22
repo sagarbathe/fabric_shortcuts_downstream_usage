@@ -9,3 +9,6 @@ deploy/.deploy-state.*.json
 
 # Word lock file
 ~$*.docx
+
+# Python bytecode cache from ad-hoc local scripts
+__pycache__/
