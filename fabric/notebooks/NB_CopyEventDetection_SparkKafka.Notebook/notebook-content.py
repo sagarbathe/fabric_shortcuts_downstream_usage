@@ -448,6 +448,24 @@ try:
 
         if augmented_json_strings:
             parsed_df = spark.read.json(spark.sparkContext.parallelize(augmented_json_strings))
+            # spark.read.json infers its schema purely from whatever keys are actually present in
+            # this batch - a batch containing only non-COMPLETE/malformed events (e.g. the one-time
+            # throwaway sample event the deploy script sends to unblock the Eventstream destination's
+            # portal Configure wizard, which has no run/job/inputs/outputs at all) can end up MISSING
+            # expected columns entirely, not just null. Add any missing expected column with a
+            # harmless default so the filters/select below never fail with an UNRESOLVED_COLUMN
+            # AnalysisException, regardless of what this particular batch happens to contain.
+            REQUIRED_COLUMN_DEFAULTS = {
+                "eventType": F.lit(None).cast("string"),
+                "eventTime": F.lit(None).cast("string"),
+                "run": F.lit(None).cast("string"),
+                "job": F.lit(None).cast("string"),
+                "inputs": F.array().cast("array<string>"),
+                "outputs": F.array().cast("array<string>"),
+            }
+            for col_name, default_expr in REQUIRED_COLUMN_DEFAULTS.items():
+                if col_name not in parsed_df.columns:
+                    parsed_df = parsed_df.withColumn(col_name, default_expr)
             matched_df = (
                 parsed_df
                 .filter(F.col("eventType") == "COMPLETE")
