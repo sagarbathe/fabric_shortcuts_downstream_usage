@@ -12,8 +12,8 @@
       "type": "Eventhouse",
       "properties": {
         "dataIngestionMode": "DirectIngestion",
-        "workspaceId": "527e6889-6f10-4b6b-98f4-1a3330b5933c",
-        "itemId": "ac6553a8-845c-421b-b1b1-bebd0be2cd76",
+        "workspaceId": "c5c50c6e-30d1-4d2e-8766-d82917e13592",
+        "itemId": "0de3152d-ec0c-4750-a933-620c354a72d7",
         "tableName": "ol_raw_events",
         "connectionName": "ES_OpenLineageEvents_bcxub4",
         "mappingRuleName": "ol_raw_events_mapping"
